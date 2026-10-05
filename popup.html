@@ -100,6 +100,8 @@
         <input id="chat" type="text" placeholder="hola / !comando" autocomplete="off">
         <button id="chat-send" class="b ok" title="Pausa ataque → Enter → escribe → Enter → reanuda ataque">💬
           Enviar</button>
+        <button id="ranking-btn" class="b ok" title="Envía /ranking al chat del juego">🏆 Ranking</button>
+
       </div>
       <div class="row2">
         <div><label>Zona de chat X / Y (vacío = abrir con Enter)</label>
@@ -115,8 +117,11 @@
       </div>
       <div class="row2">
         <div><label>Auto /reset al nivel (0 = off)</label><input id="resetlv" type="number" min="0" placeholder="400">
+          <label>Resets manuales (base)</label>
+          <input id="reset-base" type="number" min="0" placeholder="0">
+
         </div>
-        <div><label>Editar atajos (nombre:tecla, ...)</label><input id="quick-cfg" type="text" spellcheck="false"></div>
+
       </div>
     </div>
 

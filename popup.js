@@ -1,11 +1,10 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT_QUICK = 'Char:c, Inv:v, Skill:s, Party:p, Guild:g, Map:m';
 const GAME = '*://*.mu.mormon.garden/*';
 
 (async () => {
   const c = await chrome.storage.local.get([
-    'button', 'x', 'y', 'repeat', 'quick', 'chatMsg', 'statPts', 'chatX', 'chatY', 'resetLv',
-    'watchlist', 'radarMinDist', 'radarTTL', 'radarMeX', 'radarMeY', 'savedLocs', 'uiTile', 'espCfg', 'autoCfg'
+    'button', 'x', 'y', 'repeat', 'chatMsg', 'statPts', 'chatX', 'chatY', 'resetLv',
+    'watchlist', 'radarMinDist', 'radarTTL', 'radarMeX', 'radarMeY', 'savedLocs', 'uiTile', 'espCfg', 'autoCfg', 'resetBase'
   ]);
 
   // ---------- carga inicial ----------
@@ -18,7 +17,6 @@ const GAME = '*://*.mu.mormon.garden/*';
   if (c.chatX != null) $('chatx').value = c.chatX;
   if (c.chatY != null) $('chaty').value = c.chatY;
   if (c.statPts != null) $('pts').value = c.statPts;
-  $('quick-cfg').value = c.quick || DEFAULT_QUICK;
   if (c.watchlist) $('watchlist').value = c.watchlist;
   if (c.radarMinDist != null) $('radar-dist').value = c.radarMinDist;
   if (c.radarTTL != null) $('radar-ttl').value = c.radarTTL;
@@ -36,7 +34,7 @@ const GAME = '*://*.mu.mormon.garden/*';
     $('auto-lv-gm').value = c.autoCfg.icarusLv?.gm ?? 113;
     $('auto-lv-def').value = c.autoCfg.icarusLv?._default ?? 170;
   }
-
+  if (c.resetBase != null) $('reset-base').value = c.resetBase;
   // ---------- tiles / inspector ----------
   const selectTile = (t) => {
     document.querySelectorAll('.tile').forEach((b) => b.classList.toggle('sel', b.dataset.p === t));
@@ -108,26 +106,8 @@ const GAME = '*://*.mu.mormon.garden/*';
     $('stat-grid').appendChild(b);
   });
 
-  const renderQuick = (str) => {
-    $('qgrid').replaceChildren(...str.split(',').map((s) => s.trim()).filter(Boolean).map((item) => {
-      const i = item.lastIndexOf(':');
-      const b = document.createElement('button');
-      b.textContent = i > 0 ? item.slice(0, i).trim() : item;
-      b.title = 'Tecla: ' + (i > 0 ? item.slice(i + 1).trim() : item);
-      b.onclick = () => bg('keys', { seq: [i > 0 ? item.slice(i + 1).trim() : item] });
-      return b;
-    }), Object.assign(document.createElement('button'), {
-      className: 'esc', textContent: 'Esc', title: 'Cerrar ventanas del juego',
-      onclick: () => bg('keys', { seq: ['Escape'] })
-    }));
-  };
-  renderQuick($('quick-cfg').value);
-  $('quick-cfg').onchange = () => {
-    const v = $('quick-cfg').value.trim() || DEFAULT_QUICK;
-    $('quick-cfg').value = v;
-    chrome.storage.local.set({ quick: v });
-    renderQuick(v);
-  };
+
+
 
   // ---------- ESP / Auto ----------
   const splitNames = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
@@ -146,7 +126,6 @@ const GAME = '*://*.mu.mormon.garden/*';
       })
     });
   };
-
   // ---------- radar: estado, ubicaciones guardadas, registro ----------
   let lastSt = null, savedLocs = Array.isArray(c.savedLocs) ? c.savedLocs : [];
   let mapId = null, terrain = null, heatMap = null, heatImg = null, heatAt = 0, heatSpots = [];
@@ -209,6 +188,8 @@ const GAME = '*://*.mu.mormon.garden/*';
     if ($('goto-x').value === '' || $('goto-y').value === '') return;
     toGame({ type: 'goto', x: +$('goto-x').value, y: +$('goto-y').value });
   };
+  $('ranking-btn').onclick = () => bg('chat', { text: '/ranking' });
+
   $('map').onclick = (e) => {
     const r = e.target.getBoundingClientRect();
     toGame({ type: 'goto', x: 255 - Math.floor((e.clientX - r.left) * 256 / r.width), y: Math.floor((e.clientY - r.top) * 256 / r.height) }); // canvas espejado por CSS
@@ -222,6 +203,7 @@ const GAME = '*://*.mu.mormon.garden/*';
     const [{ run }, l] = await Promise.all([
       chrome.storage.session.get('run'),
       chrome.storage.local.get(['espEnabled', 'autoEnabled', 'autoState', 'espCfg'])
+
     ]);
     $('led-hold').className = 'led' + (run ? ' on' : '');
     $('tv-hold').textContent = run ? 'Mantiene ' + run.button.toUpperCase() : 'Suelto';
@@ -252,7 +234,6 @@ const GAME = '*://*.mu.mormon.garden/*';
     if (ch.x) $('x').value = ch.x.newValue ?? '';
     if (ch.y) $('y').value = ch.y.newValue ?? '';
     if (ch.repeat) $('rep').value = ch.repeat.newValue ?? 300;
-    if (ch.quick) { $('quick-cfg').value = ch.quick.newValue || DEFAULT_QUICK; renderQuick($('quick-cfg').value); }
     if (ch.chatMsg) $('chat').value = ch.chatMsg.newValue ?? '';
     if (ch.statPts) $('pts').value = ch.statPts.newValue ?? '';
     if (ch.chatX) $('chatx').value = ch.chatX.newValue ?? '';
