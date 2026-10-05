@@ -197,28 +197,23 @@
 
     window.addEventListener('mh-enter-game', () => {
         try {
-            const plates = [...document.querySelectorAll('.char-sel-plate')];
-            if (!plates.length) { console.warn('[MH] no hay plate'); return; }
+            const canvas = document.querySelector('.game-canvas');
+            if (!canvas) { console.warn('[MH] no game-canvas'); return; }
 
-            const S = window.__store;
-            const want = (S?.focusedChar || '').toLowerCase();
-            const plate = plates.find(p =>
-                p.querySelector('.char-sel-plate-name')?.textContent?.trim().toLowerCase() === want
-            ) || plates[0];
+            const r = canvas.getBoundingClientRect();
+            // Centro horizontal del canvas, y ~59% de la altura (donde está el 3D del personaje)
+            const cx = Math.round(r.left + r.width * 0.5);
+            const cy = Math.round(r.top + r.height * 0.59);
 
-            const r = plate.getBoundingClientRect();
-            // El plate está ARRIBA del personaje (translate(-50%, -100%)).
-            // El personaje 3D está debajo → bajamos ~100px desde el top del plate.
-            const cx = Math.round(r.left + r.width / 2);
-            const cy = Math.round(r.top + 100);  // ⬅️ ajustar este offset
-
-            console.log('[MH] enter: realClick en', cx, cy, '· plate bottom:', r.bottom);
+            console.log('[MH] enter-game: realClick en', cx, cy, `(canvas ${r.width}x${r.height})`);
 
             window.dispatchEvent(new CustomEvent('mh-real-click', {
                 detail: JSON.stringify({ x: cx, y: cy, dbl: true })
             }));
         } catch (e) { console.warn('[MH] enter:', e); }
     });
+
+
     // ---- DETECCIÓN DE PANTALLA (login / charselect / game) ----
     let lastPhase = null;
     setInterval(() => {
@@ -226,25 +221,31 @@
             const S = window.__store;
             let phase = 'unknown';
 
-            const hasCharScreen = !!document.querySelector(
-                '.characters-page, .char-sel-plate, .char-sel-bar'
+            // Busca elementos por texto, filtrando los que tengan tamaño real
+            const findVisible = (text) => [...document.querySelectorAll('div')].find(e =>
+                e.textContent.trim() === text &&
+                e.getBoundingClientRect().width > 0 &&
+                e.children.length === 0
             );
-            const hasLogin = !!document.querySelector(
-                'input[type="password"], .login-form, .v097d-login, [data-phase="login"]'
-            );
+
+            const hasCharScreen = !!document.querySelector('.char-sel-plate');
+            const hasServerSelect = !!(findVisible('Server 1') || findVisible('Server 1-1'));
+            const hasLogin = !!document.querySelector('input[type="password"]');
+
             const sceneLoading = !!S?.sceneLoading;
             const hasWorld = !!S?.world;
             const hasPlayer = !!S?.playerData?.name;
-            const inGame = hasWorld && hasPlayer && !hasCharScreen && !sceneLoading;
+            const inGame = hasWorld && hasPlayer && !hasCharScreen && !hasServerSelect && !sceneLoading;
 
-            // Prioridad: charselect > login > game (el DOM de charselect es inconfundible)
-            if (hasCharScreen) phase = 'charselect';
+            // Prioridad: serverselect > charselect > login > game
+            if (hasServerSelect) phase = 'serverselect';
+            else if (hasCharScreen) phase = 'charselect';
             else if (hasLogin) phase = 'login';
             else if (inGame) phase = 'game';
 
             if (phase !== lastPhase) {
                 console.log('[MH] fase:', lastPhase, '→', phase,
-                    { hasCharScreen, hasLogin, inGame, hasWorld, hasPlayer, sceneLoading });
+                    { hasCharScreen, hasServerSelect, hasLogin, inGame, hasWorld, hasPlayer, sceneLoading });
                 lastPhase = phase;
                 window.dispatchEvent(new CustomEvent('mh-phase', {
                     detail: JSON.stringify({ phase })

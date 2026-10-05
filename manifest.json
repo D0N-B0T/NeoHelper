@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mouse Hold BG",
-  "version": "5.0",
+  "version": "6.0",
   "action": {
     "default_title": "Mouse Hold BG"
   },
@@ -23,7 +23,8 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "bg/index.js",
+    "type": "module"
   },
   "content_scripts": [
     {
@@ -43,7 +44,14 @@
         "*://*.mu.mormon.garden/*"
       ],
       "js": [
-        "content.js"
+        "content/_bus.js",
+        "content/radar.js",
+        "content/autowalk.js",
+        "content/mobs.js",
+        "content/stats.js",
+        "content/esp-bridge.js",
+        "content/auto.js",
+        "content/main.js"
       ],
       "run_at": "document_idle",
       "all_frames": true

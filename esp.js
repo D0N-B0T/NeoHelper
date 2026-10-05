@@ -16,14 +16,18 @@
         showClan: true,
         showOnlyVisible: true,
         maxDist: 0,          // 0 = sin límite
-        names: [],           // lista blanca (vacío = todos)
-        showNames: []        // lista negra (vacío = ninguno)
+        whitelist: [],   // antes: names
+        blacklist: [],   // antes: showNames
     };
-
     chrome.storage.local.get(['espCfg'], (c) => {
-        if (c.espCfg) Object.assign(cfg, c.espCfg);
+        if (c.espCfg) {
+            Object.assign(cfg, c.espCfg);
+            if (c.espCfg.names && !c.espCfg.whitelist) cfg.whitelist = c.espCfg.names;
+            if (c.espCfg.showNames && !c.espCfg.blacklist) cfg.blacklist = c.espCfg.showNames;
+        }
         applyCfg();
     });
+
     chrome.storage.onChanged.addListener((ch, area) => {
         if (area === 'local' && ch.espCfg) {
             Object.assign(cfg, ch.espCfg.newValue || {});
@@ -95,8 +99,8 @@
         const ents = store.world?.playersQuery?._entities;
         if (!ents) { animId = requestAnimationFrame(render); return; }
 
-        const white = cfg.names.map(n => n.toLowerCase());
-        const black = new Set(cfg.showNames.map(n => n.toLowerCase()));
+        const white = (cfg.whitelist || []).map(n => n.toLowerCase());
+        const black = new Set((cfg.blacklist || []).map(n => n.toLowerCase()));
 
         const clickables = [];
 
