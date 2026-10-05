@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <title>MU toolkit</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <header>
+    <h1>📡 MU toolkit</h1>
+    <span id="hdr">sin datos</span>
+  </header>
+
+  <main class="top">
+    <section>
+      <div class="mapw">
+        <canvas id="map" width="256" height="256"></canvas>
+        <div id="cals"></div>
+        <div id="hud">Esperando datos del juego…</div>
+      </div>
+      <div id="chips" class="chips"></div>
+    </section>
+
+    <section>
+      <div class="sec">Jugadores <span id="pl-count">0 visibles</span></div>
+      <div id="radar-container">
+        <div class="empty">Sin datos aún.</div>
+      </div>
+
+      <div class="r mt">
+        <input id="goto-x" type="number" placeholder="X">
+        <input id="goto-y" type="number" placeholder="Y">
+        <button id="goto-btn" class="b go">Ir</button>
+      </div>
+
+      <div class="sec mt2">Registro <span>últimos eventos</span></div>
+      <div id="evlog">
+        <div class="empty">Sin eventos.</div>
+      </div>
+    </section>
+  </main>
+
+  <div class="keys" id="qgrid"></div>
+
+  <div class="tiles">
+    <button class="tile" data-p="hold">
+      <div class="tn"><i class="led" id="led-hold"></i>Hold</div>
+      <div class="tv" id="tv-hold">Suelto</div>
+      <div class="ts" id="ts-hold">—</div>
+    </button>
+    <button class="tile" data-p="chat">
+      <div class="tn"><i class="led" id="led-chat"></i>Chat</div>
+      <div class="tv">Chat</div>
+      <div class="ts" id="ts-chat">sin zona</div>
+    </button>
+    <button class="tile" data-p="radar">
+      <div class="tn"><i class="led" id="led-radar"></i>Radar</div>
+      <div class="tv" id="tv-radar">Sin datos</div>
+      <div class="ts" id="ts-radar">—</div>
+    </button>
+    <button class="tile" data-p="esp">
+      <div class="tn"><i class="led" id="led-esp"></i>ESP</div>
+      <div class="tv" id="tv-esp">Off</div>
+      <div class="ts" id="ts-esp">—</div>
+    </button>
+    <button class="tile" data-p="auto">
+      <div class="tn"><i class="led" id="led-auto"></i>Auto</div>
+      <div class="tv" id="tv-auto">Off</div>
+      <div class="ts" id="ts-auto">—</div>
+    </button>
+  </div>
+
+  <div class="insp">
+    <div class="p" id="p-hold">
+      <div class="row2">
+        <div><label>Botón a mantener</label>
+          <select id="btn">
+            <option value="right">Derecho</option>
+            <option value="left">Izquierdo</option>
+            <option value="middle">Central</option>
+          </select>
+        </div>
+        <div><label>Re-apretar cada (ms, 0 = solo hold)</label><input id="rep" type="number" min="0"></div>
+      </div>
+      <label>Posición X / Y (vacío = centro)</label>
+      <div class="r">
+        <input id="x" type="number" placeholder="x">
+        <input id="y" type="number" placeholder="y">
+        <button id="pick-hold" class="b blue" title="Haz clic sobre el punto del juego">🎯 Marcar</button>
+        <button id="go" class="b go">Mantener</button>
+        <button id="stop" class="b stp">Soltar</button>
+      </div>
+    </div>
+
+    <div class="p" id="p-chat">
+      <label>Chat rápido (vacío = solo Enter)</label>
+      <div class="r">
+        <input id="chat" type="text" placeholder="hola / !comando" autocomplete="off">
+        <button id="chat-send" class="b ok" title="Pausa ataque → Enter → escribe → Enter → reanuda ataque">💬
+          Enviar</button>
+      </div>
+      <div class="row2">
+        <div><label>Zona de chat X / Y (vacío = abrir con Enter)</label>
+          <div class="r"><input id="chatx" type="number" placeholder="X"><input id="chaty" type="number"
+              placeholder="Y"><button id="chat-pick" class="b blue"
+              title="Haz clic sobre la caja de chat del juego">🎯</button></div>
+        </div>
+        <div><label>Puntos rápidos /add</label>
+          <div class="r"><input id="pts" type="number" min="1" placeholder="Cant." style="width:64px">
+            <div id="stat-grid" class="r grow"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row2">
+        <div><label>Auto /reset al nivel (0 = off)</label><input id="resetlv" type="number" min="0" placeholder="400">
+        </div>
+        <div><label>Editar atajos (nombre:tecla, ...)</label><input id="quick-cfg" type="text" spellcheck="false"></div>
+      </div>
+    </div>
+
+    <div class="p" id="p-radar">
+      <label>Jugadores a vigilar (separados por coma)</label>
+      <input id="watchlist" type="text" placeholder="DarkLord, MG, Sniper" autocomplete="off">
+      <div class="row2">
+        <div><label>Distancia mín. p/ alertar (tiles)</label><input id="radar-dist" type="number" min="0" value="0">
+        </div>
+        <div><label>Desaparecido tras (seg)</label><input id="radar-ttl" type="number" min="3" value="15"></div>
+        <div><label>Mi pos X (si no se detecta)</label><input id="me-x" type="number" value="226"></div>
+        <div><label>Mi pos Y</label><input id="me-y" type="number" value="236"></div>
+      </div>
+    </div>
+
+    <div class="p" id="p-esp">
+      <div class="r"><button id="esp-toggle" class="b grow">ESP: OFF</button><button id="esp-save"
+          class="b">Guardar</button></div>
+      <div class="row2">
+        <div><label>Distancia máxima (0 = sin límite)</label><input id="esp-max-dist" type="number" min="0"></div>
+        <div><label>Solo estos nombres</label><input id="esp-names" type="text" placeholder="coma" autocomplete="off">
+        </div>
+        <div><label>Ocultar estos nombres</label><input id="esp-black" type="text" placeholder="coma"
+            autocomplete="off"></div>
+      </div>
+    </div>
+
+    <div class="p" id="p-auto">
+      <div class="r"><button id="auto-toggle" class="b grow">AUTO: OFF</button><button id="auto-save"
+          class="b">Guardar</button></div>
+      <div class="row2">
+        <div><label>Usuario</label><input id="auto-user" type="text"></div>
+        <div><label>Password</label><input id="auto-pass" type="password"></div>
+        <div><label>Personaje</label><input id="auto-char" type="text" placeholder="MGNoPk"></div>
+        <div><label>Lv icarus GM / otras</label>
+          <div class="r"><input id="auto-lv-gm" type="number" placeholder="113"><input id="auto-lv-def" type="number"
+              placeholder="170"></div>
+        </div>
+      </div>
+      <div id="auto-status" class="note">—</div>
+    </div>
+  </div>
+
+  <footer>
+    <button id="f-stop" class="b stp">⛔ Soltar mouse</button>
+    <button id="walk-stop" class="b stp2">🚶 Parar movimiento (Esc)</button>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

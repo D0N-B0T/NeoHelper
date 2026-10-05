@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <title>📡 Radar</title>
+    <link rel="stylesheet" href="radar.css">
+    <base target="_blank">
+</head>
+
+<body>
+    <header>
+        <h1>📡 Radar & Lista de Interés</h1>
+    </header>
+
+    <label>Jugadores a vigilar (separados por coma)</label>
+    <input id="watchlist" type="text" placeholder="DarkLord, MG, Sniper" autocomplete="off">
+
+    <div class="cfg">
+        <div>
+            <label>Distancia mínima p/ alertar (tiles)</label>
+            <input id="radar-dist" type="number" min="0" value="0" placeholder="0 = cualquiera">
+        </div>
+        <div>
+            <label>Desaparecido tras (seg)</label>
+            <input id="radar-ttl" type="number" min="3" value="15">
+        </div>
+        <div>
+            <label>Mi pos X (si no se detecta)</label>
+            <input id="me-x" type="number" value="226">
+        </div>
+        <div>
+            <label>Mi pos Y</label>
+            <input id="me-y" type="number" value="236">
+        </div>
+    </div>
+    <label>Ir a pos (X / Y)</label>
+    <div style="display:flex;gap:6px">
+        <input id="goto-x" type="number" placeholder="X">
+        <input id="goto-y" type="number" placeholder="Y">
+        <button id="goto-btn"
+            style="padding:0 14px;background:#238636;color:#fff;border:1px solid #2ea043;border-radius:6px;font-weight:700;cursor:pointer">IR</button>
+    </div>
+    <label>Ubicaciones guardadas (clic = ir · ✕ = borrar)</label>
+    <div style="display:flex;gap:6px;margin-top:4px">
+        <button id="save-cur" title="Guarda tu posición actual con nombre automático">📍 Guardar actual</button>
+        <button id="save-as" title="Guarda tu posición actual con un nombre personalizado">✏️ Guardar como…</button>
+    </div>
+    <div id="saved-list"></div>
+
+    <div id="radar-status" class="status">Esperando datos del juego…</div>
+
+    <div id="radar-container">
+        <div class="empty">Sin datos aún. Camina un poco en el juego.</div>
+    </div>
+
+
+    <canvas id="map" width="256" height="256"></canvas>
+    <div id="spots" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+    <button id="walk-stop"
+        style="width:100%;margin-top:8px;padding:8px;background:#da3633;color:#fff;border:1px solid #f85149;border-radius:6px;font-weight:700;cursor:pointer;text-transform:uppercase">⛔
+        Detener movimiento (Esc)</button>
+
+
+
+    <script src="radar.js"></script>
+</body>
+
+</html>

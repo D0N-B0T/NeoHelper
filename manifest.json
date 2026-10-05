@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "Mouse Hold BG",
+  "version": "5.0",
+  "action": {
+    "default_title": "Mouse Hold BG"
+  },
+  "description": "Mouse hold + Radar en ventana flotante",
+  "permissions": [
+    "debugger",
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "notifications",
+    "sidePanel",
+    "unlimitedStorage"
+  ],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.mu.mormon.garden/*"
+      ],
+      "js": [
+        "interceptor.js",
+        "esp.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "*://*.mu.mormon.garden/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "radar.html",
+        "radar.js",
+        "radar.css"
+      ],
+      "matches": [
+        "*://*.mu.mormon.garden/*"
+      ]
+    }
+  ]
+}
