@@ -110,7 +110,12 @@
                 if (w && !S.sceneLoading && w.netObjsQuery) {
                     const list = [];
                     for (const e of w.netObjsQuery) {
+                        // Solo mobs: tiene monsterAnimation, no está muriendo, no es jugador
                         if (!e.monsterAnimation || 'dying' in e || e.droppedItem) continue;
+                        // Excluir jugadores (típicamente tienen propiedades de player)
+                        if (e.isPlayer || e.playerIndex != null || e.className?.includes('Player')) continue;
+                        // Excluir NPCs visuales (tienen animations pero no son mobs atacables)
+                        if (e.isNPC || e.isVendor) continue;
                         list.push([e.netId, e.objectNameInWorld, Math.round(e.transform.pos.x), Math.round(e.transform.pos.z)]);
                     }
                     window.dispatchEvent(new CustomEvent('mh-mobs', { detail: JSON.stringify({ map: w.mapIndex, list }) }));
@@ -253,11 +258,58 @@
             }
         } catch (e) { console.warn('[MH] phase detector:', e); }
     }, 500);
+
+    // Debug: imprime el estado del AUTO cada 3s en la consola del juego
+    setInterval(() => {
+        // No hay forma de leer __MH desde acá (isolated world).
+        // Pero sí podemos ver los logs que el isolated world está mandando vía mensajes al bg.
+        // Truco: exponemos un listener para que el isolated nos pueda hablar.
+    }, 3000);
+
+    // Canal de debug: el isolated world puede mandar texto acá y se imprime
+    window.addEventListener('mh-log', (ev) => {
+        try {
+            const { text, level } = JSON.parse(ev.detail);
+            (console[level] || console.log)('[MH-DEBUG]', text);
+        } catch (_) { }
+    });
+    // ---------- Puente de logs desde isolated world ----------
+    window.addEventListener('mh-log', (ev) => {
+        try {
+            const d = JSON.parse(ev.detail);
+            const level = d.level || 'log';
+            const fn = console[level] || console.log;
+            fn.call(console, d.text);
+        } catch (_) { }
+    });
     console.log('[MH] Interceptor cargado');
 
+    window.__mhMove = (x, y) => {
+        try {
+            const S = window.__store;
+            if (!S?.world) return { ok: false, error: 'no world' };
+            const arr = [...S.world.playersQuery];
+            const me = arr.find(e => e.netId === S.playerId);
+            if (!me) return { ok: false, error: 'no me' };
+            const m = me.playerMoveTo;
+            if (!m) return { ok: false, error: 'no playerMoveTo' };
+            m.point.x = x;
+            m.point.y = y;
+            m.handled = false;
+            m.silent = false;
+            m.sendToServer = true;
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+    };
 
 
-
-
+    window.addEventListener('mh-log', (ev) => {
+        try {
+            const { text, level } = JSON.parse(ev.detail);
+            (console[level] || console.log)(text);
+        } catch (_) { }
+    });
 })();
 

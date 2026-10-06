@@ -5,6 +5,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
 
 let timer;
 let busy = 0;
+let AUTO_WANTS_HOLD = false;
 
 const BTN = {
     right: { button: 'right', buttons: 2 },
@@ -45,19 +46,19 @@ chrome.runtime.onMessage.addListener((m, sender) => {
             await chrome.debugger.attach(t, '1.3')
                 .catch((e) => { if (!/already attached/i.test(e.message)) throw e; });
             const expr = `new Promise((resolve) => {
-        const root = document.fullscreenElement || document.documentElement;
-        const ov = document.createElement('div');
-        ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;cursor:crosshair;background:rgba(0,0,0,.45);';
-        const tip = document.createElement('div');
-        tip.textContent = '\uD83C\uDFAF Haz clic para fijar el punto (Esc cancela)';
-        tip.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#0d1117;color:#3fb950;border:2px solid #3fb950;padding:8px 18px;border-radius:8px;font:bold 13px ui-monospace,monospace;pointer-events:none;';
-        ov.appendChild(tip);
-        root.appendChild(ov);
-        const done = (v) => { window.removeEventListener('keydown', esc, true); ov.remove(); resolve(v); };
-        const esc = (e) => { if (e.key === 'Escape') done(null); };
-        window.addEventListener('keydown', esc, true);
-        ov.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); done({ x: Math.round(e.clientX), y: Math.round(e.clientY) }); }, true);
-      })`;
+                const root = document.fullscreenElement || document.documentElement;
+                const ov = document.createElement('div');
+                ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;cursor:crosshair;background:rgba(0,0,0,.45);';
+                const tip = document.createElement('div');
+                tip.textContent = '\uD83C\uDFAF Haz clic para fijar el punto (Esc cancela)';
+                tip.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#0d1117;color:#3fb950;border:2px solid #3fb950;padding:8px 18px;border-radius:8px;font:bold 13px ui-monospace,monospace;pointer-events:none;';
+                ov.appendChild(tip);
+                root.appendChild(ov);
+                const done = (v) => { window.removeEventListener('keydown', esc, true); ov.remove(); resolve(v); };
+                const esc = (e) => { if (e.key === 'Escape') done(null); };
+                window.addEventListener('keydown', esc, true);
+                ov.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); done({ x: Math.round(e.clientX), y: Math.round(e.clientY) }); }, true);
+                })`;
             try {
                 const r = await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
                     expression: expr, awaitPromise: true, returnByValue: true
@@ -79,6 +80,8 @@ chrome.runtime.onMessage.addListener((m, sender) => {
             }
             return;
         }
+
+
 
         // ---------- REAL CLICK ----------
         if (m.type === 'realClick') {
@@ -113,6 +116,31 @@ chrome.runtime.onMessage.addListener((m, sender) => {
             return;
         }
 
+        // ---------- MH-MOVE (autowalk) ----------
+        if (m.type === 'mh-move') {
+            const tabId = await resolveTabId(m, sender);
+            if (!tabId) return;
+            const t = { tabId };
+            try {
+                await chrome.debugger.attach(t, '1.3')
+                    .catch(e => { if (!/already attached/i.test(e.message)) throw e; });
+                const r = await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
+                    expression: `window.__mhMove(${m.x}, ${m.y})`,
+                    returnByValue: true
+                });
+                if (!r?.result?.value?.ok) {
+                    console.warn('[MH-MOVE] falló:', r?.result?.value);
+                }
+            } catch (e) {
+                console.warn('[MH-MOVE] error:', e);
+            } finally {
+                const { run } = await chrome.storage.session.get('run');
+                if (!run || run.tabId !== tabId) {
+                    await chrome.debugger.detach(t).catch(() => { });
+                }
+            }
+            return;
+        }
         // ---------- PRESS ENTER ----------
         if (m.type === 'pressEnter') {
             const tabId = await resolveTabId(m, sender);
@@ -151,12 +179,25 @@ chrome.runtime.onMessage.addListener((m, sender) => {
                 });
                 [x, y] = r.result.value;
             }
+            await chrome.storage.session.set({ run: { tabId, x, y, repeat: m.repeat, ...b } });
+            clearInterval(timer);
+
+            // pausesChat: deja el hold armado pero SIN pulsar el botón ni
+            // arrancar el loop de clics, para no robar el foco del chat.
+            if (m.pausesChat) {
+                await chrome.storage.session.remove('run').catch(() => { });
+                await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                    type: 'mouseReleased', x, y, button: b.button, buttons: 0, clickCount: 1
+                }).catch(() => { });
+                chrome.action.setBadgeBackgroundColor({ color: '#d33' });
+                chrome.action.setBadgeText({ text: 'HOLD' });
+                return;
+            }
+
             await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
             await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
                 type: 'mousePressed', x, y, button: b.button, buttons: b.buttons, clickCount: 1
             });
-            await chrome.storage.session.set({ run: { tabId, x, y, repeat: m.repeat, ...b } });
-            clearInterval(timer);
             if (m.repeat > 0) timer = setInterval(() => {
                 if (busy) return;
                 chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: b.button, buttons: b.buttons })
@@ -174,34 +215,138 @@ chrome.runtime.onMessage.addListener((m, sender) => {
             if (!tabId) return;
             const text = m.text || '';
             if (!text) return;
+
+            // 1. Si nos piden mantener hold, guardamos estado y soltamos
+            const keepHold = !!m.keepHold;
+            let savedRun = null;
+            if (keepHold) AUTO_WANTS_HOLD = true;   // el content cree que hay hold armado
+            if (keepHold) {
+                const { run } = await chrome.storage.session.get('run');
+                if (run) {
+                    savedRun = run;
+                    // soltar el hold actual
+                    try {
+                        const t = { tabId: run.tabId };
+                        await chrome.debugger.attach(t, '1.3')
+                            .catch(e => { if (!/already attached/i.test(e.message)) throw e; });
+                        await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                            type: 'mouseMoved', x: run.x, y: run.y
+                        });
+                        await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                            type: 'mouseReleased', x: run.x, y: run.y,
+                            button: run.button, buttons: 0, clickCount: 1
+                        });
+                        // OJO: 'run' NO se borra aqui. El paso 3 lo usa como
+                        // savedRun para volver a pulsar; se reescribe intacto.
+                    } catch (e) {
+                        console.warn('[MH] chat: no pude soltar hold', e);
+                    }
+                }
+            }
+
+            // 2. Mandar el chat (código actual)
             try {
                 await withDebugger(tabId, async (t) => {
                     await chrome.debugger.sendCommand(t, 'Emulation.setFocusEmulationEnabled', { enabled: true });
-                    const res = await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
-                        expression: `!!document.querySelector('.v097d-chat-field.line.to-normal')`, returnByValue: true
-                    });
-                    if (!res?.result?.value) {
+                    // El chat puede estar CERRADO (sin el campo en el DOM). Antes se
+                    // comprobaba una sola vez; si el juego tardaba en abrirlo, el
+                    // foco caia en el canvas y el texto se perdia -> el comando
+                    // (/move, /reset...) nunca llegaba. Reintentamos hasta tener el
+                    // campo visible y ENFOCADO de verdad.
+                    const CHAT_SEL = '.v097d-chat-field.line.to-normal';
+                    const FOCUS_EXPR = `(() => { const el = document.querySelector('${CHAT_SEL}'); if (!el) return false; el.focus(); return document.activeElement === el; })()`;
+                    let chatOk = false;
+                    for (let i = 0; i < 12; i++) {
+                        const res = await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
+                            expression: FOCUS_EXPR, returnByValue: true
+                        });
+                        if (res?.result?.value) { chatOk = true; break; }
+                        // Abrir el chat: Enter (el juego lo abre si esta cerrado)
                         await sendKey(t, 'Enter');
                         await new Promise(r => setTimeout(r, 250));
                     }
-                    await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
-                        expression: `document.querySelector('.v097d-chat-field.line.to-normal')?.focus()`, returnByValue: true
-                    });
+                    if (!chatOk) console.warn('[MH] chat: el campo de chat no aparecio, mando igual:', text);
                     for (const ch of text) {
-                        const vk = ch.toUpperCase().charCodeAt(0);
+                        const p = keyParams(ch);
+                        const base = {
+                            key: p.key, code: p.code,
+                            windowsVirtualKeyCode: p.vk, nativeVirtualKeyCode: p.vk,
+                            modifiers: p.modifiers || 0
+                        };
                         await chrome.debugger.sendCommand(t, 'Input.dispatchKeyEvent', {
-                            type: 'keyDown', key: ch, text: ch, unmodifiedText: ch,
-                            windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk
-                        });
-                        await chrome.debugger.sendCommand(t, 'Input.dispatchKeyEvent', {
-                            type: 'keyUp', key: ch,
-                            windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk
+                            ...base, type: p.text ? 'keyDown' : 'rawKeyDown',
+                            text: p.text, unmodifiedText: p.text
                         });
                         await new Promise(r => setTimeout(r, 25));
+                        await chrome.debugger.sendCommand(t, 'Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+                        await new Promise(r => setTimeout(r, 25));
                     }
+                    // Verificar que el texto ENTRO en el campo. Si el foco se perdio,
+                    // se escribio en el vacio: reenfocar y reescribir antes del Enter.
+                    const typed0 = String((await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
+                        expression: `(document.querySelector('${CHAT_SEL}')?.value || '')`,
+                        returnByValue: true
+                    }))?.result?.value || '');
+                    if (!typed0.toLowerCase().includes(text.toLowerCase())) {
+                        console.warn('[MH] chat: el texto no entro (campo =', JSON.stringify(typed0), ') -> reescribo');
+                        await chrome.debugger.sendCommand(t, 'Runtime.evaluate', { expression: FOCUS_EXPR, returnByValue: true });
+                        for (const ch of text) {
+                            const p = keyParams(ch);
+                            const base = {
+                                key: p.key, code: p.code,
+                                windowsVirtualKeyCode: p.vk, nativeVirtualKeyCode: p.vk,
+                                modifiers: p.modifiers || 0
+                            };
+                            await chrome.debugger.sendCommand(t, 'Input.dispatchKeyEvent', {
+                                ...base, type: p.text ? 'keyDown' : 'rawKeyDown',
+                                text: p.text, unmodifiedText: p.text
+                            });
+                            await new Promise(r => setTimeout(r, 25));
+                            await chrome.debugger.sendCommand(t, 'Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+                            await new Promise(r => setTimeout(r, 25));
+                        }
+                    }
+                    await new Promise(r => setTimeout(r, keepHold ? 50 : 150));
                     await sendKey(t, 'Enter');
+                    console.log('[MH] chat enviado:', text);
                 });
-            } catch (e) { console.error('[MH] chat:', e); }
+            } catch (e) {
+                console.error('[MH] chat:', e);
+            }
+
+            // 3. Reanudar el hold si nos pidieron mantener
+            if (keepHold) {
+                await new Promise(r => setTimeout(r, 400));
+                // Si el 'stop' canceló el hold (pausesChat: no había 'run'),
+                // hay que reactivarlo desde cero, no solo re-pulsar.
+                if (!savedRun) {
+                    const cfg = await chrome.storage.local.get(['button', 'x', 'y', 'repeat']);
+                    const tabId2 = await resolveTabId(m, sender);
+                    if (tabId2) {
+                        const b2 = BTN[cfg.button || 'right'] || BTN.right;
+                        savedRun = {
+                            tabId: tabId2, x: cfg.x ?? 0, y: cfg.y ?? 0,
+                            repeat: cfg.repeat ?? 300, ...b2
+                        };
+                    }
+                }
+                if (savedRun) try {
+                    const t = { tabId: savedRun.tabId };
+                    await chrome.debugger.attach(t, '1.3')
+                        .catch(e => { if (!/already attached/i.test(e.message)) throw e; });
+                    await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                        type: 'mouseMoved', x: savedRun.x, y: savedRun.y
+                    });
+                    await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                        type: 'mousePressed', x: savedRun.x, y: savedRun.y,
+                        button: savedRun.button, buttons: savedRun.buttons, clickCount: 1
+                    });
+                    await chrome.storage.session.set({ run: savedRun });
+                } catch (e) {
+                    console.warn('[MH] chat: no pude reanudar hold', e);
+                }
+            }
+
             return;
         }
 
@@ -213,6 +358,9 @@ chrome.runtime.onMessage.addListener((m, sender) => {
             const { run } = await chrome.storage.session.get('run');
             if (!run) {
                 busy--;
+                // Si el content cree que hay hold (autoparty con pausesChat),
+                // no borrar el badge: el chat con keepHold lo repone.
+                if (AUTO_WANTS_HOLD) return;
                 try { chrome.action.setBadgeText({ text: '' }); } catch (_) { }
                 return;
             }

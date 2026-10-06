@@ -55,6 +55,18 @@
     </div>
 
 
+    <label>Mapa <span id="zoom-lbl" style="color:#8b949e;text-transform:none">1×</span></label>
+    <div style="display:flex;gap:4px;margin:4px 0 2px">
+        <button id="zoom-out" title="Alejar (−) · rueda del ratón sobre el mapa"
+            style="padding:4px 10px;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;font:700 11px ui-monospace,monospace;cursor:pointer">−</button>
+        <button id="zoom-in" title="Acercar (+) · rueda del ratón sobre el mapa"
+            style="padding:4px 10px;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;font:700 11px ui-monospace,monospace;cursor:pointer">+</button>
+        <button id="zoom-reset" title="Ver el mapa completo"
+            style="padding:4px 10px;background:#161b22;color:#58a6ff;border:1px solid #30363d;border-radius:4px;font:700 10px ui-monospace,monospace;cursor:pointer">COMPLETO</button>
+        <button id="zoom-me" title="Centrar en el jugador (también doble clic en el mapa)"
+            style="padding:4px 10px;background:#161b22;color:#3fb950;border:1px solid #30363d;border-radius:4px;font:700 10px ui-monospace,monospace;cursor:pointer">🎯 ME</button>
+    </div>
+
     <canvas id="map" width="256" height="256"></canvas>
     <div id="spots" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
     <button id="walk-stop"

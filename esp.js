@@ -19,25 +19,7 @@
         whitelist: [],   // antes: names
         blacklist: [],   // antes: showNames
     };
-    chrome.storage.local.get(['espCfg'], (c) => {
-        if (c.espCfg) {
-            Object.assign(cfg, c.espCfg);
-            if (c.espCfg.names && !c.espCfg.whitelist) cfg.whitelist = c.espCfg.names;
-            if (c.espCfg.showNames && !c.espCfg.blacklist) cfg.blacklist = c.espCfg.showNames;
-        }
-        applyCfg();
-    });
 
-    chrome.storage.onChanged.addListener((ch, area) => {
-        if (area === 'local' && ch.espCfg) {
-            Object.assign(cfg, ch.espCfg.newValue || {});
-            applyCfg();
-        }
-        if (area === 'local' && ch.espEnabled) {
-            setEnabled(!!ch.espEnabled.newValue);
-        }
-    });
-    chrome.storage.local.get('espEnabled', (c) => setEnabled(!!c.espEnabled));
 
     function applyCfg() {
         if (!canvas) return;
@@ -130,7 +112,8 @@
 
             const x = screen.x, y = screen.y;
             const bw = cfg.boxW, bh = cfg.boxH;
-            const bx = x - bw / 2, by = y - bh / 2;
+            // screen.y = punto de anclaje (pies); la caja se dibuja por encima
+            const bx = x - bw / 2, by = y - bh;
 
             // caja
             ctx.save();

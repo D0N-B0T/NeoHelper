@@ -79,6 +79,26 @@
                 chrome.runtime.sendMessage({ target: 'bg', type: 'stop' }).catch(() => { });
                 if (MH.auto) { MH.auto.holding = false; MH.auto.holdSpot = null; }
             }
+
+            // Kill detectado por ganancia de EXP (para modo simulación)
+            // Solo registrar si el modo simulación está explícitamente activado
+            if (ov.lastExp != null && s.exp > ov.lastExp && MH.api.simulation && MH.api.simulation.isEnabled?.()) {
+                const expGain = s.exp - ov.lastExp;
+                const mobs = MH.api.getMobs?.() || [];
+                // Encontrar el mob más cercano
+                let closestMob = null;
+                let closestDist = Infinity;
+                for (const [name, x, y] of mobs) {
+                    const dist = Math.abs(x - (MH.me?.x || 0)) + Math.abs(y - (MH.me?.y || 0));
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestMob = name;
+                    }
+                }
+                if (closestMob && closestDist < 10) {  // solo si está cerca
+                    MH.api.simulation.recordKill?.(closestMob, expGain);
+                }
+            }
             ov.lastExp = s.exp;
 
             // muestras de EXP/zena cada 5s, ventana de 10 min
@@ -96,11 +116,13 @@
             const ses = (now - ov.t0) / 60000;
             const nm = String(s.n).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
-            const sendChat = (text) =>
-                chrome.runtime.sendMessage({ target: 'bg', type: 'chat', text }).catch(() => { });
+            const sendChat = async (text) => {
+                await chrome.runtime.sendMessage({ target: 'bg', type: 'chat', text }).catch(() => { });
+                await new Promise(r => setTimeout(r, 500));  // wait for Enter to process
+            };
             const stopHoldThenChat = async (text) => {
                 await chrome.runtime.sendMessage({ target: 'bg', type: 'stop' }).catch(() => { });
-                await new Promise(r => setTimeout(r, 600));
+                await new Promise(r => setTimeout(r, 800));  // longer delay for hold release
                 await sendChat(text);
             };
 

@@ -93,15 +93,99 @@ import {
     let heatMap = null, heatImg = null, heatAt = 0, heatSpots = [];
     let busy = false, prevMapSeen = null;
 
+    // ---------- zoom ----------
+    // La vista dibuja solo la ventana [cx±v/2, cy±v/2] del mapa, donde v = 256/zoom.
+    // El canvas sigue midiendo 256x256, así que drawMap() no cambia.
+    const ZOOMS = [1, 1.5, 2, 3, 4, 6];
+    let zoomIdx = 0;                         // 0 = 1x (mapa completo)
+    let view = { x: 128, y: 128 };           // centro de la ventana (tiles)
+    let viewBound = false;                   // false = sigue al jugador automáticamente
+
+    const clampView = () => {
+        const half = 128 / ZOOMS[zoomIdx];
+        view.x = Math.max(half, Math.min(256 - half, view.x));
+        view.y = Math.max(half, Math.min(256 - half, view.y));
+    };
+    const setZoom = (idx, center) => {
+        zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, idx));
+        if (center) { view.x = center.x; view.y = center.y; viewBound = false; }
+        clampView();
+        updateZoomUi();
+    };
+    const focusOnMe = () => {
+        if (!lastSt?.ok) return;
+        view.x = lastSt.me.x; view.y = lastSt.me.y;
+        viewBound = false;
+        clampView();
+        updateZoomUi();
+    };
+    const updateZoomUi = () => {
+        const z = ZOOMS[zoomIdx];
+        const t = $('zoom-lbl');
+        if (t) t.textContent = (z === 1 ? '1×' : z + '×') + (z === 1 ? ' · mapa completo' : (viewBound ? ' · auto' : ''));
+    };
+
+    $('zoom-in').onclick = () => setZoom(zoomIdx + 1, lastSt?.ok ? lastSt.me : null);
+    $('zoom-out').onclick = () => {
+        if (zoomIdx === 0) return;
+        setZoom(zoomIdx - 1);
+        if (zoomIdx === 0) viewBound = false;
+        updateZoomUi();
+    };
+    $('zoom-reset').onclick = () => { zoomIdx = 0; view = { x: 128, y: 128 }; viewBound = false; updateZoomUi(); };
+    $('zoom-me').onclick = focusOnMe;
+
+    // Clic: convierte pantalla → tile con la misma matemática que el render.
     $('map').onclick = (e) => {
         const r = e.target.getBoundingClientRect();
-        sendToGame({
-            type: 'goto',
-            x: 255 - Math.floor((e.clientX - r.left) * 256 / r.width),
-            y: Math.floor((e.clientY - r.top) * 256 / r.height)
-        });
+        const v = 256 / ZOOMS[zoomIdx];
+        // el canvas está espejado en X (radar.css: transform: scaleX(-1)),
+        // así que la X de pantalla se invierte para volver a coords de tile
+        const sx = 1 - (e.clientX - r.left) / r.width;
+        const sy = (e.clientY - r.top) / r.height;
+        const x = view.x - v / 2 + sx * v;
+        const y = view.y - v / 2 + sy * v;
+        sendToGame({ type: 'goto', x: Math.max(0, Math.min(255, Math.round(x))), y: Math.max(0, Math.min(255, Math.round(y))) });
     };
     $('map').oncontextmenu = (e) => { e.preventDefault(); sendToGame({ type: 'stopwalk' }); };
+    // Rueda = zoom, centrado en el cursor.
+    $('map').addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const r = e.target.getBoundingClientRect();
+        const v0 = 256 / ZOOMS[zoomIdx];
+        const sx = 1 - (e.clientX - r.left) / r.width;
+        const sy = (e.clientY - r.top) / r.height;
+        const wx = view.x - v0 / 2 + sx * v0;
+        const wy = view.y - v0 / 2 + sy * v0;
+        const next = Math.max(0, Math.min(ZOOMS.length - 1, zoomIdx + (e.deltaY < 0 ? 1 : -1)));
+        if (next === zoomIdx) return;
+        const v1 = 256 / ZOOMS[next];
+        view.x = wx + (0.5 - sx) * v1;
+        view.y = wy + (0.5 - sy) * v1;
+        zoomIdx = next;
+        clampView();
+        viewBound = false;
+        updateZoomUi();
+    }, { passive: false });
+    // Arrastrar con el botón central = pan; doble clic = centrar en el jugador.
+    let dragging = null;
+    $('map').addEventListener('mousedown', (e) => {
+        if (e.button !== 1) return;
+        e.preventDefault();
+        dragging = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y };
+    });
+    addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const r = $('map').getBoundingClientRect();
+        const v = 256 / ZOOMS[zoomIdx];
+        view.x = dragging.vx + (e.clientX - dragging.px) / r.width * v;
+        view.y = dragging.vy - (e.clientY - dragging.py) / r.height * v;
+        clampView();
+        updateZoomUi();
+    });
+    addEventListener('mouseup', () => { dragging = null; });
+    $('map').addEventListener('dblclick', focusOnMe);
+    updateZoomUi();
 
     setInterval(async () => {
         if (busy) return;
@@ -149,12 +233,33 @@ import {
                 }));
             }
 
-            drawMap($('map'), {
-                terrain, heatImg,
-                mobs: st.mobs, players: lista, watch,
-                route: st.route, routeIdx: st.routeIdx,
-                me: st.me, heatSpots
-            });
+            // Si el zoom es 1x, dibuja igual que antes (sin transform, evita difuminado).
+            if (ZOOMS[zoomIdx] === 1) {
+                drawMap($('map'), {
+                    terrain, heatImg,
+                    mobs: st.mobs, players: lista, watch,
+                    route: st.route, routeIdx: st.routeIdx,
+                    me: st.me, heatSpots
+                });
+            } else {
+                // En zoom, sigue al jugador salvo que hayas paneado manualmente.
+                if (!viewBound) { view.x = st.me.x; view.y = st.me.y; }
+                clampView();
+                const v = 256 / ZOOMS[zoomIdx];
+                const g = $('map').getContext('2d');
+                g.setTransform(1, 0, 0, 1, 0, 0);
+                g.clearRect(0, 0, 256, 256);
+                g.translate(128, 128);
+                g.scale(256 / v, 256 / v);
+                g.translate(-view.x, -view.y);
+                drawMap($('map'), {
+                    terrain, heatImg,
+                    mobs: st.mobs, players: lista, watch,
+                    route: st.route, routeIdx: st.routeIdx,
+                    me: st.me, heatSpots
+                });
+                g.setTransform(1, 0, 0, 1, 0, 0);
+            }
 
             const meTxt = `pos (${st.me.x}, ${st.me.y}) ${st.me.auto ? 'auto' : 'manual'}`;
             $('radar-status').textContent = lista.length

@@ -45,9 +45,12 @@
       ],
       "js": [
         "content/_bus.js",
+        "content/cfg.js",
+        "content/routes.js",
         "content/radar.js",
         "content/autowalk.js",
         "content/mobs.js",
+        "content/hunt.js",
         "content/stats.js",
         "content/esp-bridge.js",
         "content/auto.js",

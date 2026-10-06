@@ -1,0 +1,95 @@
+﻿
+        // ---------- CHAT ----------
+        if (m.type === 'chat') {
+            const tabId = await resolveTabId(m, sender);
+            if (!tabId) return;
+            const text = m.text || '';
+            if (!text) return;
+
+            // 1. Si nos piden mantener hold, guardamos estado y soltamos
+            const keepHold = !!m.keepHold;
+            let savedRun = null;
+            if (keepHold) {
+                const { run } = await chrome.storage.session.get('run');
+                if (run) {
+                    savedRun = run;
+                    // soltar el hold actual
+                    try {
+                        const t = { tabId: run.tabId };
+                        await chrome.debugger.attach(t, '1.3')
+                            .catch(e => { if (!/already attached/i.test(e.message)) throw e; });
+                        await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                            type: 'mouseMoved', x: run.x, y: run.y
+                        });
+                        await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                            type: 'mouseReleased', x: run.x, y: run.y,
+                            button: run.button, buttons: 0, clickCount: 1
+                        });
+                        await chrome.storage.session.remove('run');
+                    } catch (e) {
+                        console.warn('[MH] chat: no pude soltar hold', e);
+                    }
+                }
+            }
+
+            // 2. Mandar el chat (cÃ³digo actual)
+            try {
+                await withDebugger(tabId, async (t) => {
+                    await chrome.debugger.sendCommand(t, 'Emulation.setFocusEmulationEnabled', { enabled: true });
+                    const res = await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
+                        expression: `!!document.querySelector('.v097d-chat-field.line.to-normal')`,
+                        returnByValue: true
+                    });
+                    if (!res?.result?.value) {
+                        await sendKey(t, 'Enter');
+                        await new Promise(r => setTimeout(r, 250));
+                    }
+                    await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
+                        expression: `document.querySelector('.v097d-chat-field.line.to-normal')?.focus()`,
+                        returnByValue: true
+                    });
+                    for (const ch of text) {
+                        const vk = ch.toUpperCase().charCodeAt(0);
+                        await chrome.debugger.sendCommand(t, 'Input.dispatchKeyEvent', {
+                            type: 'keyDown', key: ch, text: ch, unmodifiedText: ch,
+                            windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk
+                        });
+                        await chrome.debugger.sendCommand(t, 'Input.dispatchKeyEvent', {
+                            type: 'keyUp', key: ch,
+                            windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk
+                        });
+                        await new Promise(r => setTimeout(r, 25));
+                    }
+                    await sendKey(t, 'Enter');
+                });
+            } catch (e) {
+                console.error('[MH] chat:', e);
+            }
+
+            // 3. Reanudar el hold si nos pidieron mantener
+            if (keepHold && savedRun) {
+                await new Promise(r => setTimeout(r, 400));
+                try {
+                    const t = { tabId: savedRun.tabId };
+                    await chrome.debugger.attach(t, '1.3')
+                        .catch(e => { if (!/already attached/i.test(e.message)) throw e; });
+                    await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                        type: 'mouseMoved', x: savedRun.x, y: savedRun.y
+                    });
+                    await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', {
+                        type: 'mousePressed', x: savedRun.x, y: savedRun.y,
+                        button: savedRun.button, buttons: savedRun.buttons, clickCount: 1
+                    });
+                    await chrome.storage.session.set({ run: savedRun });
+                } catch (e) {
+                    console.warn('[MH] chat: no pude reanudar hold', e);
+                }
+            }
+
+            return;
+        }
+
+        // ---------- STOP ----------
+        if (m.type === 'stop') {
+            busy++;
+            clearInterval(timer);

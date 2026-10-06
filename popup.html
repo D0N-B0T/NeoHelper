@@ -70,6 +70,21 @@
       <div class="tv" id="tv-auto">Off</div>
       <div class="ts" id="ts-auto">—</div>
     </button>
+    <button class="tile" data-p="hunt">
+      <div class="tn"><i class="led" id="led-hunt"></i>Caza</div>
+      <div class="tv" id="tv-hunt">Off</div>
+      <div class="ts" id="ts-hunt">—</div>
+    </button>
+    <button class="tile" data-p="routes">
+      <div class="tn"><i class="led" id="led-routes"></i>Rutas</div>
+      <div class="tv" id="tv-routes">—</div>
+      <div class="ts" id="ts-routes">sin ruta</div>
+    </button>
+    <button class="tile" data-p="sim">
+      <div class="tn"><i class="led" id="led-sim"></i>Sim</div>
+      <div class="tv" id="tv-sim">Off</div>
+      <div class="ts" id="ts-sim">—</div>
+    </button>
   </div>
 
   <div class="insp">
@@ -162,6 +177,91 @@
         </div>
       </div>
       <div id="auto-status" class="note">—</div>
+    </div>
+    <div class="p" id="p-hunt">
+      <div class="row2">
+        <div>
+          <label>Mapa objetivo</label>
+          <select id="hunt-map">
+            <option value="0">Lorencia</option>
+            <option value="2">Devias</option>
+            <option value="3">Noria</option>
+            <option value="7">Atlans</option>
+            <option value="8">Tarkan</option>
+          </select>
+        </div>
+        <div>
+          <label>Radio de detección (tiles)</label>
+          <input id="hunt-radius" type="number" min="5" value="40">
+        </div>
+      </div>
+
+      <label>Goldens a cazar (los del mapa elegido)</label>
+      <div id="hunt-list" class="chips" style="max-height:120px"></div>
+
+      <div class="row2 mt">
+        <div>
+          <label>Separación del sweep (tiles)</label>
+          <input id="hunt-salt" type="number" min="4" max="40" value="12">
+        </div>
+        <div>
+          <label>Recoger drops</label>
+          <select id="hunt-loot">
+            <option value="1">Sí (Space)</option>
+            <option value="0">No</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="r mt">
+        <button id="hunt-toggle" class="b grow go">▶ Empezar cacería</button>
+      </div>
+
+      <div id="hunt-status" class="note">—</div>
+    </div>
+    <div class="p" id="p-routes">
+      <label>Ruta activa</label>
+      <div class="r">
+        <select id="route-active" class="grow"></select>
+        <button id="route-new" class="b blue">+ Nueva</button>
+      </div>
+
+      <label class="mt">Pasos de la ruta</label>
+      <div id="route-steps" style="max-height:260px;overflow-y:auto"></div>
+
+      <div class="r mt">
+        <button id="route-add-step" class="b blue grow">+ Añadir paso</button>
+        <button id="route-delete" class="b stp2">🗑 Borrar ruta</button>
+      </div>
+
+      <label class="mt">Nombre de la ruta</label>
+      <input id="route-name" type="text" placeholder="Farm estándar">
+
+      <div class="note" id="route-info">—</div>
+    </div>
+    <div class="p" id="p-sim">
+      <label>Modo Simulación</label>
+      <div class="r mt">
+        <button id="sim-toggle" class="b grow">SIM: OFF</button>
+        <button id="sim-export" class="b blue">📥 Exportar datos</button>
+      </div>
+
+      <div class="row2 mt">
+        <div>
+          <label>Grid step (tiles)</label>
+          <input id="sim-grid-step" type="number" min="2" max="20" value="12">
+        </div>
+      </div>
+
+      <div class="note" id="sim-status">Detenido. Modo: —</div>
+      <div class="note" id="sim-stats">Mapa: — | Progreso: 0/0</div>
+
+      <div class="sec mt2">Datos en vivo <span id="sim-data-age">—</span></div>
+      <div id="sim-live"
+        style="background:#010409;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font:11px/1.5 ui-monospace,Consolas,monospace">
+        <div style="color:#8b949e">Sin datos todavía. Arranca la simulación.</div>
+      </div>
+      <div id="sim-mobs" style="margin-top:6px;display:flex;flex-direction:column;gap:3px"></div>
     </div>
   </div>
 

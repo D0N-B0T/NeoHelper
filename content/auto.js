@@ -12,11 +12,7 @@
         enabled: false,
         user: '', pass: '',
         charName: '',
-        lorenciaSpot: { x: 202, y: 124, untilLv: 13 },
-        devias3Spot: { x: 225, y: 217 },
-        icarusSpot: { x: 46, y: 199, untilLv: 400 },
-        devias3Cmd: '/move devias3',
-        icarusCmd: '/move icarus',
+
         icarusLv: { _default: 170, gm: 113 },
         phase: 'unknown',
         cls: '', lv: 0, charLevel: 0, map: null,
@@ -28,6 +24,10 @@
         lastMoveMap: null,
         pendingMoveUntil: 0,
         icarusMap: 10,
+        autopartySent: false,       // ya se mandó /autoparty on en este mapa
+        _heldMap: null,             // mapa en el que el hold estaba activo
+        _reholdTried: false,        // ya intenté un HOLD limpio tras autoparty
+
         _warnedMaps: null,
     };
     MH.auto = AUTO;   // ⬅️ para que stats.js lo vea
@@ -48,24 +48,54 @@
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
     };
+    // Suelta el hold y NO lo reanuda. El bg lo repone al terminar si keepHold.
     const stopHoldThenChat = async (text) => {
         await chrome.runtime.sendMessage({ target: 'bg', type: 'stop' }).catch(() => { });
         await new Promise(r => setTimeout(r, 600));
-        await chrome.runtime.sendMessage({ target: 'bg', type: 'chat', text }).catch(() => { });
+        await chrome.runtime.sendMessage({ target: 'bg', type: 'chat', text, keepHold: true }).catch(() => { });
     };
 
-    const holdMouse = async () => {
+    // Manda /autoparty on una sola vez por máp y (en el primer hold del mapa).
+    // Suelta el hold, envía el comando, y luego lo reanuda manualmente.
+    async function sendAutoParty() {
+        if (AUTO.autopartySent) return;
+        const cmd = MH.cfg?.mu?.commands?.autoParty;
+        if (!cmd) return;
+        AUTO.autopartySent = true;
+        console.log('[MH-AUTO] enviando', cmd, '· mapa', AUTO.map);
+
+        const wasHolding = AUTO.holding;
+        if (wasHolding) await unholdMouse();
+
+        // Enviar el comando sin keepHold (no reanuda automáticamente)
+        await chrome.runtime.sendMessage({ target: 'bg', type: 'stop' }).catch(() => { });
+        await new Promise(r => setTimeout(r, 300));
+        await chrome.runtime.sendMessage({ target: 'bg', type: 'chat', text: cmd, keepHold: false }).catch(() => { });
+
+        // Esperar a que el comando se envíe
+        await new Promise(r => setTimeout(r, 600));
+
+        // Reanudar el hold manualmente si estaba activo
+        if (wasHolding) {
+            await holdMouse(false);  // reanudar con clics normales
+        }
+    }
+
+    const holdMouse = async (pausesChat = false) => {
         if (AUTO.holding) return;
         const cfg = await chrome.storage.local.get(['button', 'x', 'y', 'repeat']);
-        chrome.runtime.sendMessage({
+        const msg = {
             target: 'bg', type: 'start',
             button: cfg.button || 'right',
             x: cfg.x ?? null,
             y: cfg.y ?? null,
-            repeat: cfg.repeat ?? 300
-        }).catch(() => { });
+            repeat: cfg.repeat ?? 300,
+            pausesChat
+        };
+        chrome.runtime.sendMessage(msg).catch(() => { });
         AUTO.holding = true;
-        console.log('[MH-AUTO] HOLD ON →', cfg.x, cfg.y, cfg.button, 'repeat', cfg.repeat);
+        AUTO._heldMap = AUTO.map;  // track the map where hold was activated
+        console.log('[MH-AUTO] HOLD ON →', cfg.x, cfg.y, cfg.button, 'repeat', cfg.repeat, pausesChat ? '(pausado para chat)' : '');
     };
 
     const unholdMouse = async () => {
@@ -73,6 +103,7 @@
         chrome.runtime.sendMessage({ target: 'bg', type: 'stop' }).catch(() => { });
         AUTO.holding = false;
         AUTO.holdSpot = null;
+        // NO resetear _heldMap aquí - necesitamos saber en qué mapa estaba
         console.log('[MH-AUTO] HOLD OFF');
     };
 
@@ -177,94 +208,22 @@
         const m = MH.api.getMe();
         if (!m) return;
         const map = MH.me?.map;
-
         if (map !== AUTO.map) {
             console.log('[MH-AUTO] cambio de mapa:', AUTO.map, '→', map);
             AUTO.map = map;
-            AUTO.lastMoveCmd = null;
-            AUTO.lastMoveMap = null;
-            AUTO.pendingMoveUntil = 0;
-            AUTO.holdSpot = null;
+            if (AUTO.autopartySent) {
+                AUTO.autopartySent = false;          // reenviar en el mapa nuevo
+                console.log('[MH-AUTO] mapa nuevo · autoparty se reenviará');
+            }
         }
 
-        const now = Date.now();
-        const walking = MH.api.isWalking();
-        if (walking && AUTO.holding) { await unholdMouse(); return; }
-        if (now - AUTO.lastAction < 3000) return;
-
-        if (map === 0) {
-            const { x, y, untilLv } = AUTO.lorenciaSpot;
-            if ((AUTO.lv ?? 0) >= untilLv) {
-                if (!canSendMove(AUTO.devias3Cmd)) return;
-                markMoveSent(AUTO.devias3Cmd);
-                AUTO.lastAction = now;
-                await unholdMouse();
-                await stopHoldThenChat(AUTO.devias3Cmd);
-                MH.api.waitMapThenGo(2, AUTO.devias3Spot.x, AUTO.devias3Spot.y);
-                return;
-            }
-            if (walking) return;
-            const dist = Math.hypot(m.x - x, m.y - y);
-            if (dist > 5) {
-                if (AUTO.holding) await unholdMouse();
-                AUTO.lastAction = now;
-                MH.api.goTo(x, y);
-            } else if (!AUTO.holding) {
-                AUTO.holdSpot = { x, y, map: 0 };
-                try { await holdMouse(); } catch (e) { console.error('[MH-AUTO] holdMouse error:', e); }
-            }
-            return;
+        // Primer hold en este mapa: manda /autoparty on (una sola vez por mapa).
+        if (AUTO.holding && AUTO._heldMap !== map) {
+            AUTO._heldMap = map;
+            AUTO.autopartySent = false;
+            await sendAutoParty();
         }
-
-        if (map === 2) {
-            const { x, y } = AUTO.devias3Spot;
-            const target = icarusTarget();
-            if ((AUTO.lv ?? 0) >= target) {
-                if (!canSendMove(AUTO.icarusCmd)) return;
-                markMoveSent(AUTO.icarusCmd);
-                AUTO.lastAction = now;
-                await unholdMouse();
-                await stopHoldThenChat(AUTO.icarusCmd);
-                MH.api.waitMapThenGo(AUTO.icarusMap, AUTO.icarusSpot.x, AUTO.icarusSpot.y);
-                return;
-            }
-            if (walking) return;
-            const dist = Math.hypot(m.x - x, m.y - y);
-            if (dist > 5) {
-                if (AUTO.holding) await unholdMouse();
-                AUTO.lastAction = now;
-                MH.api.goTo(x, y);
-            } else if (!AUTO.holding) {
-                AUTO.holdSpot = { x, y, map: 2 };
-                try { await holdMouse(); } catch (e) { console.error('[MH-AUTO] holdMouse error:', e); }
-            }
-            return;
-        }
-
-        if (map === AUTO.icarusMap) {
-            const { x, y, untilLv } = AUTO.icarusSpot;
-            if ((AUTO.lv ?? 0) >= untilLv) {
-                if (AUTO.holding) await unholdMouse();
-                return;
-            }
-            if (walking) return;
-            const dist = Math.hypot(m.x - x, m.y - y);
-            if (dist > 5) {
-                if (AUTO.holding) await unholdMouse();
-                AUTO.lastAction = now;
-                MH.api.goTo(x, y);
-            } else if (!AUTO.holding) {
-                AUTO.holdSpot = { x, y, map };
-                try { await holdMouse(); } catch (e) { console.error('[MH-AUTO] holdMouse error:', e); }
-            }
-            return;
-        }
-
-        if (!AUTO._warnedMaps) AUTO._warnedMaps = new Set();
-        if (!AUTO._warnedMaps.has(map)) {
-            AUTO._warnedMaps.add(map);
-            console.warn('[MH-AUTO] mapa no configurado:', map);
-        }
+        await MH.api.applyActiveStep();
     }
 
     // ---------- fase: cambio desde el detector ----------
@@ -280,6 +239,9 @@
                 if (phase === 'charselect') {
                     AUTO.lv = 0;
                     AUTO.map = null;
+                    AUTO.autopartySent = false;
+                    AUTO._heldMap = null;
+                    AUTO._reholdTried = false;
                     unholdMouse();
                 }
             }
@@ -314,6 +276,8 @@
             }).catch(() => { });
         } catch (e) { console.warn('[MH-AUTO]', e); }
     }, 1500);
-
+    MH.api.holdMouse = holdMouse;
+    MH.api.unholdMouse = unholdMouse;
+    MH.api.stopHoldThenChat = stopHoldThenChat;
     console.log('[MH] auto.js cargado');
 })();

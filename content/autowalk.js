@@ -1,14 +1,10 @@
 // content/autowalk.js
-// Autowalk: BFS sobre el terreno + waypoints + follow a jugadores.
-// Expone: MH.api.stopWalk, MH.api.goTo, MH.api.follow, MH.api.isWalking,
-//         MH.api.getWalkState, MH.api.waitMapThenGo
-// Consume: MH.me, MH.tracked, MH.cfg
 
 (() => {
     const MH = window.__MH;
     if (!MH) { console.error('[MH] _bus.js no cargado'); return; }
 
-    const wcfg = { lookahead: 10, tick: 150, maxStill: 24 }; // maxStill = ticks sin moverse (~3.6 s)
+    const wcfg = { lookahead: 10, tick: 150, maxStill: 24 };
 
     // ---------- stopWalk ----------
     // halt=true: además hace clic en el centro (tu personaje) para que frene donde está
@@ -19,28 +15,53 @@
         w.path = null;
         if (why !== 'llegó') { clearInterval(w.followTimer); w.followTimer = null; }
         w.msg = why;
-        if (was && halt && MH.me) {
-            window.dispatchEvent(new CustomEvent('mh-moveto', {
-                detail: JSON.stringify({ x: MH.me.x, y: MH.me.y })
-            }));
-        }
+        if (was && halt && MH.me) chrome.runtime.sendMessage({ target: 'bg', type: 'mh-move', x: MH.me.x, y: MH.me.y }).catch(() => { });
     };
 
     // ---------- goTo (BFS) ----------
     async function goTo(tx, ty, near = 3) {
         const w = MH.walk;
         clearInterval(w.timer); w.timer = null;
-        const fail = (m) => { w.msg = m; console.warn('[MH]', m); };
+
+        // ⬇️ NUEVO: esperar hasta 5s a que el terreno esté cargado
         const mapId = MH.me?.map;
-        const b64 = (await chrome.storage.local.get('map:' + mapId))['map:' + mapId];
+        let b64 = null;
+        for (let i = 0; i < 25; i++) {
+            b64 = (await chrome.storage.local.get('map:' + mapId))['map:' + mapId];
+            if (b64) break;
+            await new Promise(r => setTimeout(r, 200));
+        }
+        const fail = (m) => { w.msg = m; console.warn('[MH]', m); };
         if (!b64 || !MH.me) return fail('sin terreno o sin pos');
         const bin = atob(b64);
         const ok = (x, y) => x >= 0 && y >= 0 && x < 256 && y < 256 && !(bin.charCodeAt(y * 256 + x) & 12);
-        if (!ok(tx, ty)) return fail('destino no caminable');
+
+        // Si el destino no es caminable, buscar el punto más cercano que sí lo sea
+        let targetX = tx, targetY = ty;
+        if (!ok(tx, ty)) {
+            console.log('[MH] destino no caminable, buscando punto cercano...');
+            let bestDist = Infinity;
+            const searchRadius = 20;  // buscar en radio de 20 tiles
+            for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+                for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+                    const nx = tx + dx, ny = ty + dy;
+                    if (ok(nx, ny)) {
+                        const dist = Math.hypot(dx, dy);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            targetX = nx;
+                            targetY = ny;
+                        }
+                    }
+                }
+            }
+            if (bestDist === Infinity) return fail('no hay punto caminable cerca del destino');
+            console.log('[MH] nuevo destino:', targetX, targetY, '(dist original:', bestDist.toFixed(1), 'tiles)');
+        }
 
         const s = MH.api.getMe();
         const start = s.y * 256 + s.x;
-        const goal = ty * 256 + tx;
+        const goal = targetY * 256 + targetX;
         const par = new Int32Array(65536).fill(-2);
         par[start] = -1;
         const q = [start];
@@ -75,7 +96,7 @@
             const p = MH.api.getMe(), now = Date.now();
             if (MH.me?.map !== mapId) return stopWalk('cambió de mapa', false);
             if (!p.auto) return stopWalk('sin posición auto', true);
-            if (Math.hypot(tx - p.x, ty - p.y) <= near) { stopWalk('llegó', false); return; }
+            if (Math.hypot(targetX - p.x, targetY - p.y) <= near) { stopWalk('llegó', false); return; }
 
             const lim = Math.min(path.length, idx + wcfg.lookahead * 2);
             let bd = 1e9;
@@ -97,9 +118,7 @@
             const dLast = lastWp ? Math.hypot(lastWp.x - p.x, lastWp.y - p.y) : 99;
             if (now - lastSend > 200 && (!lastWp || (wp !== lastWp && dLast <= 3) || (still > 0 && still % 4 === 0))) {
                 lastWp = wp; lastSend = now;
-                window.dispatchEvent(new CustomEvent('mh-moveto', {
-                    detail: JSON.stringify({ x: wp.x, y: wp.y })
-                }));
+                chrome.runtime.sendMessage({ target: 'bg', type: 'mh-move', x: wp.x, y: wp.y }).catch(() => { });
             }
         }, wcfg.tick);
     }
@@ -124,7 +143,6 @@
     }
 
     // ---------- waitMapThenGo (usado por AUTO) ----------
-    // Tras /move, espera a estar en destMap con terreno cargado, recién ahí autowalk a (destX, destY).
     function waitMapThenGo(destMap, destX, destY) {
         const t0 = Date.now();
         const wt = setInterval(async () => {

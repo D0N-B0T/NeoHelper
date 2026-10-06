@@ -27,18 +27,21 @@
 
     // ---------- Posición propia ----------
     // La detectada si es reciente; si no, la manual de la config
-    const getMe = () =>
-        (MH.me && Date.now() - MH.me.ts < 5000)
-            ? { x: MH.me.x, y: MH.me.y, auto: true }
-            : { x: MH.cfg.meX, y: MH.cfg.meY, auto: false };
+    const getMe = () => {
+        if (MH.me && Date.now() - MH.me.ts < 5000) {
+            return { x: MH.me.x, y: MH.me.y, map: MH.me.map, auto: true };
+        }
+        return { x: MH.cfg.meX, y: MH.cfg.meY, map: MH.me?.map ?? null, auto: false };
+    };
 
+    // ⬇️ ESTA LÍNEA FALTABA
     MH.api.getMe = getMe;
 
     window.addEventListener('mh-mypos', (ev) => {
         try {
             const d = JSON.parse(ev.detail);
             if (Number.isFinite(+d.x) && Number.isFinite(+d.y)) {
-                MH.me = { x: +d.x, y: +d.y, map: d.map, ts: Date.now() };
+                MH.me = { x: +d.x, y: +d.y, map: d.map, ts: Date.now() };   // ⬅️ acá SÍ está map
             }
         } catch (_) { }
     });
