@@ -41,7 +41,7 @@
         <button id="goto-btn"
             style="padding:0 14px;background:#238636;color:#fff;border:1px solid #2ea043;border-radius:6px;font-weight:700;cursor:pointer">IR</button>
     </div>
-    <label>Ubicaciones guardadas (clic = ir · ✕ = borrar)</label>
+    <label>Mis ubicaciones <span style="color:#8b949e;text-transform:none">clic = ir · ✕ = borrar</span></label>
     <div style="display:flex;gap:6px;margin-top:4px">
         <button id="save-cur" title="Guarda tu posición actual con nombre automático">📍 Guardar actual</button>
         <button id="save-as" title="Guarda tu posición actual con un nombre personalizado">✏️ Guardar como…</button>
@@ -64,11 +64,15 @@
         <button id="zoom-reset" title="Ver el mapa completo"
             style="padding:4px 10px;background:#161b22;color:#58a6ff;border:1px solid #30363d;border-radius:4px;font:700 10px ui-monospace,monospace;cursor:pointer">COMPLETO</button>
         <button id="zoom-me" title="Centrar en el jugador (también doble clic en el mapa)"
-            style="padding:4px 10px;background:#161b22;color:#3fb950;border:1px solid #30363d;border-radius:4px;font:700 10px ui-monospace,monospace;cursor:pointer">🎯 ME</button>
+            style="padding:4px 10px;background:#161b22;color:#3fb950;border:1px solid #30363d;border-radius:4px;font:700 10px ui-monospace,monospace;cursor:pointer">🎯
+            ME</button>
     </div>
 
     <canvas id="map" width="256" height="256"></canvas>
-    <div id="spots" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+    <label>Spots de mobs <span id="spots-count" style="color:#8b949e;text-transform:none">0</span></label>
+    <div id="spots-list" class="lst">
+        <div class="empty">Sin spots en este mapa.</div>
+    </div>
     <button id="walk-stop"
         style="width:100%;margin-top:8px;padding:8px;background:#da3633;color:#fff;border:1px solid #f85149;border-radius:6px;font-weight:700;cursor:pointer;text-transform:uppercase">⛔
         Detener movimiento (Esc)</button>

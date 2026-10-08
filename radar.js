@@ -92,6 +92,7 @@ import {
     let mapId = null, terrain = null;
     let heatMap = null, heatImg = null, heatAt = 0, heatSpots = [];
     let busy = false, prevMapSeen = null;
+    let spotRows = [];                       // [{ds, x, y}] para refrescar solo la distancia
 
     // ---------- zoom ----------
     // La vista dibuja solo la ventana [cx±v/2, cy±v/2] del mapa, donde v = 256/zoom.
@@ -223,15 +224,28 @@ import {
                 const decoded = decodeHeat(raw);
                 heatImg = decoded.img;
                 heatSpots = decoded.spots;
-                const spotsEl = $('spots');
-                spotsEl.replaceChildren(...heatSpots.map((s, k) => {
-                    const b = document.createElement('button');
-                    b.textContent = `${k + 1} · ${s.n} (${s.x},${s.y})`;
-                    b.style.cssText = 'padding:4px 8px;background:#0d1117;color:#f0b429;border:1px solid #30363d;border-radius:4px;font:700 10px ui-monospace,monospace;cursor:pointer';
-                    b.onclick = () => sendToGame({ type: 'goto', x: s.x, y: s.y });
-                    return b;
-                }));
+                $('spots-count').textContent = heatSpots.length;
+                const hue = (n) => { let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+                spotRows = [];
+                const sorted = [...heatSpots].sort((p, q) => Math.hypot(p.x - st.me.x, p.y - st.me.y) - Math.hypot(q.x - st.me.x, q.y - st.me.y));
+                $('spots-list').replaceChildren(...(sorted.length ? sorted.map((p) => {
+                    const r = document.createElement('div');
+                    r.className = 'lrow';
+                    const go = document.createElement('button');
+                    go.className = 'lgo';
+                    go.title = 'Clic: ir a (' + p.x + ', ' + p.y + ')';
+                    go.onclick = () => sendToGame({ type: 'goto', x: p.x, y: p.y });
+                    const dot = document.createElement('i'); dot.className = 'dot'; dot.style.background = `hsl(${hue(p.n)} 70% 60%)`;
+                    const nm = document.createElement('span'); nm.className = 'ln'; nm.textContent = p.n;
+                    const cc = document.createElement('span'); cc.className = 'lc'; cc.textContent = p.x + ',' + p.y;
+                    const ds = document.createElement('span'); ds.className = 'ld';
+                    go.append(dot, nm, cc, ds);
+                    r.append(go);
+                    spotRows.push({ ds, x: p.x, y: p.y });
+                    return r;
+                }) : [Object.assign(document.createElement('div'), { className: 'empty', textContent: 'Sin spots en este mapa.' })]));
             }
+            for (const r of spotRows) r.ds.textContent = Math.round(Math.hypot(r.x - st.me.x, r.y - st.me.y)) + 't';
 
             // Si el zoom es 1x, dibuja igual que antes (sin transform, evita difuminado).
             if (ZOOMS[zoomIdx] === 1) {
@@ -283,4 +297,4 @@ import {
             busy = false;
         }
     }, 1000);
-})();
+})();   

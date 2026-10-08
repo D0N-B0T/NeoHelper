@@ -227,3 +227,67 @@ input:focus {
 #save-as:hover {
   border-color: #58a6ff;
 }
+
+/* ---- Spots de mobs: filas verticales ---- */
+.lst {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.lst .empty {
+  color: #8b949e;
+  text-align: center;
+  padding: 6px;
+  font-size: 10px;
+}
+
+.lrow .lgo {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 7px;
+  background: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  font: 700 11px ui-monospace, Consolas, monospace;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lrow .lgo:hover {
+  border-color: #f0b429;
+}
+
+.lrow .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.lrow .ln {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lrow .lc {
+  color: #8b949e;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.lrow .ld {
+  color: #58a6ff;
+  min-width: 34px;
+  text-align: right;
+}

@@ -2,7 +2,7 @@
 import {
   $, GAME_URL, findGameTab, sendToGame,
   decodeTerrain, decodeHeat, drawMap,
-  renderPlayersTable, renderChips, createEventLog,
+  renderPlayersTable, createEventLog,
   loadSavedLocs, saveSavedLocs, splitNames
 } from './ui/shared.js';
 
@@ -11,7 +11,7 @@ import {
   const c = await chrome.storage.local.get([
     'button', 'x', 'y', 'repeat', 'chatMsg', 'statPts', 'chatX', 'chatY', 'resetLv',
     'watchlist', 'radarMinDist', 'radarTTL', 'radarMeX', 'radarMeY', 'savedLocs', 'uiTile',
-    'espCfg', 'autoCfg', 'resetBase', 'huntCfg', 'simGridStep'
+    'espCfg', 'autoCfg', 'resetBase', 'huntCfg', 'simGridStep', 'mapLayers', 'heatModes'
   ]);
   // ---------- rutas ----------
   let routes = [];
@@ -236,14 +236,23 @@ import {
   }
   if (c.resetBase != null) $('reset-base').value = c.resetBase;
 
-  // ---------- tiles / inspector ----------
-  const selectTile = (t) => {
-    document.querySelectorAll('.tile').forEach((b) => b.classList.toggle('sel', b.dataset.p === t));
-    document.querySelectorAll('.insp .p').forEach((p) => p.classList.toggle('act', p.id === 'p-' + t));
-    chrome.storage.local.set({ uiTile: t });
+  // ---------- riel de herramientas -> hoja lateral ----------
+  const SHEET_TITLES = { auto: 'Auto · credenciales', esp: 'ESP', hunt: 'Caza', routes: 'Rutas', sim: 'Simulación', chat: 'Chat', ranking: 'Ranking', hold: 'Hold · mantener mouse' };
+  let curSheet = null;
+  const openSheet = (k) => {
+    curSheet = k;
+    document.querySelectorAll('#rail .rb').forEach((b) => b.classList.toggle('act', b.dataset.s === (k || 'radar')));
+    document.querySelectorAll('#sheet .p').forEach((p) => p.classList.toggle('act', p.id === 'p-' + k));
+    $('sht').textContent = SHEET_TITLES[k] || '';
+    $('sheet').dataset.k = k || '';
+    $('sheet').classList.toggle('on', !!k);
   };
-  document.querySelectorAll('.tile').forEach((b) => { b.onclick = () => selectTile(b.dataset.p); });
-  selectTile(c.uiTile || 'hold');
+  // radar = vista principal (cierra la hoja); repetir la misma herramienta también la cierra
+  document.querySelectorAll('[data-s]').forEach((b) => {
+    b.onclick = () => openSheet(b.dataset.s === 'radar' || b.dataset.s === curSheet ? null : b.dataset.s);
+  });
+  $('shx').onclick = () => openSheet(null);
+  openSheet(null);
 
   // ---------- persistencia de inputs ----------
   $('resetlv').onchange = () => chrome.storage.local.set({ resetLv: +$('resetlv').value || 0 });
@@ -344,8 +353,10 @@ import {
   $('pick-hold').onclick = () => requestPick('hold');
   $('chat-pick').onclick = () => requestPick('chat');
 
-  // ---------- hold ----------
-  $('go').onclick = async () => {
+  // ---------- hold (toggle del footer: Mantener <-> Soltar) ----------
+  let holdRun = null;   // lo refresca paintState desde storage.session
+  $('f-hold').onclick = async () => {
+    if (holdRun) return chrome.runtime.sendMessage({ target: 'bg', type: 'stop' });
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) return;
     const r = +$('rep').value || 0;
@@ -358,7 +369,6 @@ import {
     await chrome.storage.local.set(cfg);
     chrome.runtime.sendMessage({ target: 'bg', type: 'start', tabId: tab.id, ...cfg });
   };
-  $('stop').onclick = $('f-stop').onclick = () => chrome.runtime.sendMessage({ target: 'bg', type: 'stop' });
 
   // ---------- chat ----------
   const doChat = async () => {
@@ -373,12 +383,149 @@ import {
   $('chat-send').onclick = doChat;
   $('chat').onkeydown = (e) => { if (e.key === 'Enter') doChat(); };
 
-  $('ranking-btn').onclick = () => chrome.runtime.sendMessage({
-    target: 'bg', type: 'chat', text: '/ranking', keepHold: true
+  $('ranking-btn').onclick = () => { openSheet('ranking'); loadRanking(); };
+
+  // ---------- ranking (API directa del servidor) ----------
+  // https://mu.mormon.garden/api/ranking
+  const RK_URL = 'https://mu.mormon.garden/api/ranking';
+  const RK_TTL = 30000;            // 30 s de caché en memoria
+  const RK_REFRESH = 300000;       // auto-refresh cada 5 min
+  const RK_CLASS = { 0: 'DW', 1: 'DK', 2: 'FE', 3: 'MG', 4: 'DL', 5: 'SU', 6: 'BK', 7: 'ME', 8: 'BS', 9: 'RF', 10: 'ELF', 11: 'SM', 12: 'MG' };
+  let rkCache = { t: 0, data: null };
+  let rkView = 'resets';
+  let rkTimer = null;              // setInterval del auto-refresh
+
+  const rkClass = (c) => c == null ? '—' : (c === 2 ? 'BK' : (RK_CLASS[c] || 'C' + c));
+  const rkAgo = (iso) => {
+    const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (!Number.isFinite(s) || s < 0) return '';
+    return s < 60 ? `hace ${s}s` : s < 3600 ? `hace ${Math.floor(s / 60)}m` : `hace ${Math.floor(s / 3600)}h`;
+  };
+
+  const renderRanking = () => {
+    const d = rkCache.data;
+    const list = $('rk-list');
+    if (!d) { list.innerHTML = '<div class="empty">Sin datos. Pulsa ↻.</div>'; return; }
+    const all = d[rkView] || [];
+    if (!all.length) { list.innerHTML = '<div class="empty">Sin filas.</div>'; return; }
+    const key = rkView === 'resets' ? 'totalResets' : 'elo';
+    const unit = rkView === 'resets' ? 'R' : ' ELO';
+    const me = $('auto-char').value.trim().toLowerCase();
+    const myIdx = me ? all.findIndex((r) => (r.name || '').toLowerCase() === me) : -1;
+
+    // línea de estado: antigüedad de los datos + tu puesto y la brecha con el de arriba
+    const ago = rkAgo(d.updatedAt || '');
+    let info = ago ? 'Actualizado ' + ago : 'Consultado ' + rkAgo(new Date(rkCache.t).toISOString());
+    if (myIdx >= 0) {
+      const up = all[myIdx - 1];
+      info += ` · Tú #${myIdx + 1}` + (up ? ` · faltan ${Math.max(0, up[key] - all[myIdx][key])}${unit} para ${up.name}` : ' · vas primero');
+    }
+    $('rk-updated').textContent = info;
+
+    // cabecera fija + filas en columnas alineadas; tu personaje queda anclado al hacer scroll
+    const head = document.createElement('div');
+    head.className = 'rk-head';
+    head.append(...['#', 'Nombre', 'Cls', ...(rkView === 'resets' ? ['Resets', 'GR', 'Lv'] : ['ELO', 'W', 'L'])]
+      .map((t) => { const s = document.createElement('span'); s.textContent = t; return s; }));
+
+    const rows = all.slice(0, 50).map((r, i) => [r, i]);
+    if (myIdx >= 50) rows.push([all[myIdx], myIdx]);   // fuera del top 50: se agrega con su puesto real
+    list.replaceChildren(head, ...rows.map(([r, i]) => {
+      const row = document.createElement('div');
+      row.className = 'rk-row' + (i < 3 ? ' top' : '') + (i === myIdx ? ' me' : '');
+      row.title = `clase ${r.classNumber}`;
+      const base = [['rk-p', i + 1], ['rk-n', r.name], ['rk-cls', rkClass(r.classNumber)]];
+      const vals = rkView === 'resets'
+        ? [...base, ['rk-res', r.totalResets], ['rk-gr' + (r.grandResets ? '' : ' z'), r.grandResets], ['rk-lv' + (r.level >= 400 ? ' max' : ''), r.level]]
+        : [...base, ['rk-res', r.elo], ['rk-w', r.wins], ['rk-l', r.losses]];
+      row.append(...vals.map(([cls, txt]) => { const sp = document.createElement('span'); sp.className = cls; sp.textContent = txt; return sp; }));
+      return row;
+    }));
+  };
+
+  async function loadRanking(force) {
+    if (!force && rkCache.data && Date.now() - rkCache.t < RK_TTL) { renderRanking(); return; }
+    const st = $('ts-ranking');
+    if (st) st.textContent = 'cargando…';
+    try {
+      const resp = await fetch(RK_URL, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      rkCache = { t: Date.now(), data: await resp.json() };
+      if (st) st.textContent = 'API';
+      renderRanking();
+    } catch (e) {
+      if (st) st.textContent = 'error: ' + (e?.message || e);
+      if (rkCache.data) renderRanking();
+    }
+  }
+
+  $('rk-tabs').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      rkView = b.dataset.v;
+      $('rk-tabs').querySelectorAll('button').forEach((x) => x.classList.toggle('act', x === b));
+      renderRanking();
+    };
+  });
+  $('rank-reload').onclick = () => loadRanking(true);
+
+  // Auto-refresh: cada 5 min mientras la hoja de ranking esté abierta.
+  const rkAutoRefresh = () => {
+    clearInterval(rkTimer);
+    rkTimer = setInterval(() => {
+      if (curSheet !== 'ranking') return;      // no molesta si el panel está cerrado
+      if (document.hidden) return;             // no refresca en pestañas ocultas
+      loadRanking(true);
+    }, RK_REFRESH);
+  };
+  rkAutoRefresh();
+  // Al abrir el panel, refresca si los datos ya pasaron de 5 min.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !rkCache.data) return;
+    if (Date.now() - rkCache.t >= RK_REFRESH) loadRanking(true);
   });
 
   // Botones /add str, /add agi, etc.
-  ['str', 'agi', 'vit', 'ene', 'cmd'].forEach((s) => {
+  const STAT_KEYS = ['str', 'agi', 'vit', 'ene', 'cmd'];
+  // Puntos libres reales del personaje (llegan del juego en el ciclo de 500 ms).
+  // El slider reparte SOBRE ESTO, no sobre la cajita manual #pts.
+  let livePts = 0;
+  const statsPoints = () => {
+    const n = parseInt($('pts').value, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  // Base del reparto: los puntos libres del juego si los conocemos;
+  // si aún no han llegado (o son 0), cae al valor de la cajita manual.
+  const basePts = () => (livePts > 0 ? livePts : statsPoints());
+  // Reparto masivo: usa los puntos libres que quedan en el juego.
+  // Manda /add <stat> <n> en bloques: un solo chat con miles de números
+  // se corta en el juego.
+  const queueAdd = async (stat, total) => {
+    for (let i = 0; i < 90 && total > 0; i++) {
+      const step = Math.min(255, total);
+      total -= step;
+      chrome.runtime.sendMessage({
+        target: 'bg', type: 'chat',
+        text: '/add ' + stat + ' ' + step,
+        keepHold: true
+      }).catch(() => { });
+      await new Promise(r => setTimeout(r, 900));
+    }
+  };
+  const updatePtsUI = (total = basePts()) => {
+    const pct = +$('pts-slider').value || 0;
+    const n = Math.floor(total * pct / 100);
+    $('pts-live').textContent = pct + '%';
+    $('pts-note').textContent = total > 0
+      ? `Libres${livePts > 0 ? ' (juego)' : ' (manual)'}: ${total} · repartir ${n} al botón`
+      : 'Sin puntos detectados. Abre el juego para que lleguen.';
+    $('pts-apply').disabled = !(total > 0 && n > 0);
+    return n;
+  };
+  $('pts-slider').oninput = () => updatePtsUI();
+  $('pts').oninput = () => updatePtsUI();
+  $('pts-apply').onclick = () => { const n = updatePtsUI(); if (n > 0) $('pts').value = n; };
+  $('pts-max').onclick = () => { $('pts-slider').value = '100'; const n = updatePtsUI(); if (n > 0) $('pts').value = n; };
+  STAT_KEYS.forEach((s) => {
     const b = document.createElement('button');
     b.textContent = s.toUpperCase();
     b.title = '/add ' + s + ' (usa la cantidad del cuadro)';
@@ -392,6 +539,24 @@ import {
     };
     $('stat-grid').appendChild(b);
   });
+
+  // Botón ✎ de cada stat: reparte el tramo del slider en ese stat
+  STAT_KEYS.forEach((s) => {
+    const b = document.createElement('button');
+    b.textContent = '✎ ' + s.toUpperCase();
+    b.title = 'Repartir al ' + s + ' el % del slider (puntos libres)';
+    b.onclick = async () => {
+      const n = updatePtsUI();
+      if (!n) return;
+      b.disabled = true;
+      b.textContent = '⏳ ' + s.toUpperCase();
+      await queueAdd(s, n);
+      b.disabled = false;
+      b.textContent = '✎ ' + s.toUpperCase();
+    };
+    $('pts-max').parentElement.appendChild(b);
+  });
+  updatePtsUI();
 
   // ---------- ESP / Auto ----------
   $('esp-toggle').onclick = async () =>
@@ -448,31 +613,141 @@ import {
   let lastSt = null, savedLocs = await loadSavedLocs();
   let mapId = null, terrain = null, heatMap = null, heatImg = null, heatAt = 0, heatSpots = [];
   let busy = false, tick = 0;
-  let prevHits = new Set(), prevWalking = false, prevMapSeen = null;
+  let prevHits = new Set(), prevWalking = false, prevMapSeen = null, prevAuto = null, lastErr = null, walkDest = null;
+  let prevHunt = null, prevKills = 0, trailMap = null;
 
-  const ev = createEventLog($('evlog'));
-
-  const rerenderChips = () => renderChips($('chips'), {
-    heatSpots,
-    savedLocs,
-    currentMap: lastSt?.map,
-    onGo: (x, y) => sendToGame({ type: 'goto', x, y }),
-    onDeleteSaved: (i) => {
-      savedLocs.splice(i, 1);
-      saveSavedLocs(savedLocs);
-      rerenderChips();
-    },
-    onSave: async (withName) => {
-      if (!lastSt?.ok) { $('hud').textContent = 'Sin datos del juego.'; return; }
-      const { x, y } = lastSt.me;
-      const nm = withName ? prompt('Nombre:', 'Spot ' + (savedLocs.length + 1)) : '';
-      if (nm === null) return;
-      savedLocs.push({ name: (nm || '').trim() || `Pos (${x}, ${y})`, x, y, map: lastSt.map });
-      if (savedLocs.length > 100) savedLocs.shift();
-      saveSavedLocs(savedLocs);
-      rerenderChips();
-    }
+  // ---------- capas, zoom y rastro del mapa ----------
+  const LAYERS = Object.assign({ mobs: true, jug: true, spots: true, ruta: true, rastro: true }, c.mapLayers || {});
+  document.querySelectorAll('#layers [data-l]').forEach((b) => {
+    b.classList.toggle('off', !LAYERS[b.dataset.l]);
+    b.onclick = () => {
+      LAYERS[b.dataset.l] = !LAYERS[b.dataset.l];
+      b.classList.toggle('off', !LAYERS[b.dataset.l]);
+      chrome.storage.local.set({ mapLayers: LAYERS });
+    };
   });
+  const ZOOMS = [1, 1.5, 2, 3, 4, 6];
+  let zoomIdx = 0;
+  const view = { x: 128, y: 128 };   // centro de la ventana (tiles); sigue al jugador
+  const trail = [];                  // últimos tiles recorridos
+  const zoomTo = (i) => {
+    zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, i));
+    $('zoom-reset').textContent = ZOOMS[zoomIdx] + '×';
+  };
+  // calor del mapa: modo por mapa (el pasillo saturado de Icarus no es el de Lorencia)
+  const HEAT_MODES = Object.assign({}, c.heatModes);   // { mapId: 'nucleos' | 'tenue' | 'completo' | 'off' }
+  const HEAT_CYCLE = ['nucleos', 'tenue', 'completo', 'off'];
+  const heatOf = (m) => HEAT_MODES[m] || 'nucleos';
+  const paintHeatChip = () => { $('heat-mode').textContent = 'Calor: ' + heatOf(lastSt?.map).replace('nucleos', 'núcleos'); };
+  $('heat-mode').onclick = () => {
+    const m = lastSt?.map;
+    if (m == null) return;
+    HEAT_MODES[m] = HEAT_CYCLE[(HEAT_CYCLE.indexOf(heatOf(m)) + 1) % HEAT_CYCLE.length];
+    chrome.storage.local.set({ heatModes: HEAT_MODES });
+    heatAt = 0;   // fuerza re-decodificar el heatmap en el próximo ciclo
+    paintHeatChip();
+  };
+  $('zoom-in').onclick = () => zoomTo(zoomIdx + 1);
+  $('zoom-out').onclick = () => zoomTo(zoomIdx - 1);
+  $('zoom-reset').onclick = () => zoomTo(0);
+  $('map').addEventListener('wheel', (e) => { e.preventDefault(); zoomTo(zoomIdx + (e.deltaY < 0 ? 1 : -1)); }, { passive: false });
+
+  const evRaw = createEventLog($('evlog'));
+  let curTab = 'spots';
+  // ev(msg, cls, notify): todo va al Registro; lo relevante (notify=true) marca la pestaña con un punto rojo
+  const ev = (msg, cls, notify) => {
+    evRaw(msg, cls);
+    $('tick').textContent = new Date().toTimeString().slice(0, 5) + ' ' + msg;
+    $('tick').className = 'tick ' + (cls || '');
+    if (notify && curTab !== 'log') $('tab-log').classList.add('new');
+  };
+  document.querySelectorAll('#tabs .tb').forEach((b) => {
+    b.onclick = () => {
+      curTab = b.dataset.t;
+      document.querySelectorAll('#tabs .tb').forEach((x) => x.classList.toggle('act', x === b));
+      document.querySelectorAll('.pane').forEach((p) => { p.hidden = p.id !== 'pane-' + curTab; });
+      if (curTab === 'log') b.classList.remove('new');
+    };
+  });
+
+  // ---------- listas: spots de mobs + mis ubicaciones ----------
+  // rebuild=true recrea las filas (cambio de mapa / spots / guardados); false solo refresca las distancias
+  let listRows = [];
+  const hue = (n) => { let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+  const paintLists = (rebuild) => {
+    const me = lastSt?.ok ? lastSt.me : null;
+    if (rebuild) {
+      listRows = [];
+      const row = (cls, color, name, x, y, tag, onGo, onDel) => {
+        const r = document.createElement('div');
+        r.className = 'lrow ' + cls;
+        const go = document.createElement('button');
+        go.className = 'lgo';
+        go.title = 'Clic: ir a (' + x + ', ' + y + ')';
+        go.onclick = onGo;
+        const dot = document.createElement('i'); dot.className = 'dot'; dot.style.background = color;
+        const nm = document.createElement('span'); nm.className = 'ln'; nm.textContent = name;
+        const cc = document.createElement('span'); cc.className = 'lc'; cc.textContent = x + ',' + y + (tag ? ' · ' + tag : '');
+        const ds = document.createElement('span'); ds.className = 'ld';
+        const mc = document.createElement('span'); mc.className = 'lm';
+        go.append(dot, nm, cc, mc, ds);
+        r.append(go);
+        if (onDel) {
+          const del = document.createElement('button');
+          del.className = 'ldel'; del.textContent = '✕'; del.title = 'Borrar';
+          del.onclick = (e) => { e.stopPropagation(); onDel(); };
+          r.append(del);
+        }
+        listRows.push({ ds, mc, x, y, far: cls === 'other', spot: cls === '' });
+        return r;
+      };
+      const empty = (t) => { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; };
+      const dd = (p) => me ? Math.hypot(p.x - me.x, p.y - me.y) : 0;
+
+      const spots = [...heatSpots].sort((p, q) => dd(p) - dd(q));
+      $('spots-count').textContent = spots.length;
+      $('locs-count').textContent = savedLocs.length;
+      $('spots-list').replaceChildren(...(spots.length
+        ? spots.map((p) => row('', `hsl(${hue(p.n)} 70% 60%)`, p.n, p.x, p.y, '', () => sendToGame({ type: 'goto', x: p.x, y: p.y }), null))
+        : [empty('Sin spots en este mapa.')]));
+
+      $('locs-list').replaceChildren(...(savedLocs.length
+        ? savedLocs.map((l, i) => {
+          const other = lastSt?.map != null && l.map != null && l.map !== lastSt.map;
+          return row(other ? 'other' : 'sv', other ? '#d29922' : '#3fb950', l.name, l.x, l.y, l.map != null ? 'm' + l.map : '',
+            () => sendToGame({ type: 'goto', x: l.x, y: l.y }),
+            () => { savedLocs.splice(i, 1); saveSavedLocs(savedLocs); paintLists(true); });
+        })
+        : [empty('Sin ubicaciones guardadas.')]));
+    }
+    const mobsNow = lastSt?.mobs || [];
+    for (const r of listRows) {
+      r.ds.textContent = me && !r.far ? Math.round(Math.hypot(r.x - me.x, r.y - me.y)) + 't' : '';
+      if (r.spot) {   // mobs visibles a <=12 tiles del spot
+        const n = mobsNow.reduce((k, m) => k + (Math.hypot((m.x ?? m[1]) - r.x, (m.y ?? m[2]) - r.y) <= 12 ? 1 : 0), 0);
+        r.mc.textContent = n ? '×' + n : '';
+        r.mc.title = n + ' mobs a ≤12t del spot';
+      }
+    }
+    // lectura "spot cercano" junto al mapa
+    let best = null;
+    if (me) for (const p of heatSpots) { const d = Math.hypot(p.x - me.x, p.y - me.y); if (!best || d < best.d) best = { n: p.n, d }; }
+    $('rd-spot').textContent = best ? best.n : '—';
+    $('rd-spot-d').textContent = best ? Math.round(best.d) + 't' : '';
+  };
+  const saveHere = (withName) => {
+    if (!lastSt?.ok) { $('hud').textContent = 'Sin datos del juego.'; return; }
+    const { x, y } = lastSt.me;
+    const nm = withName ? prompt('Nombre:', 'Spot ' + (savedLocs.length + 1)) : '';
+    if (nm === null) return;
+    savedLocs.push({ name: (nm || '').trim() || `Pos (${x}, ${y})`, x, y, map: lastSt.map });
+    if (savedLocs.length > 100) savedLocs.shift();
+    saveSavedLocs(savedLocs);
+    paintLists(true);
+  };
+  $('save-cur').onclick = () => saveHere(false);
+  $('save-as').onclick = () => saveHere(true);
+  paintLists(true);
 
   $('goto-btn').onclick = () => {
     if ($('goto-x').value === '' || $('goto-y').value === '') return;
@@ -480,14 +755,21 @@ import {
   };
   $('map').onclick = (e) => {
     const r = e.target.getBoundingClientRect();
+    const v = 256 / ZOOMS[zoomIdx];
+    const sx = 1 - (e.clientX - r.left) / r.width;   // el canvas está espejado en X por CSS
+    const sy = (e.clientY - r.top) / r.height;
     sendToGame({
       type: 'goto',
-      x: 255 - Math.floor((e.clientX - r.left) * 256 / r.width),
-      y: Math.floor((e.clientY - r.top) * 256 / r.height)
+      x: Math.max(0, Math.min(255, Math.round(view.x - v / 2 + sx * v))),
+      y: Math.max(0, Math.min(255, Math.round(view.y - v / 2 + sy * v)))
     });
   };
   $('map').oncontextmenu = (e) => { e.preventDefault(); sendToGame({ type: 'stopwalk' }); };
-  $('walk-stop').onclick = () => sendToGame({ type: 'stopwalk' });
+  // footer: Parar movimiento <-> Reanudar (vuelve al último destino visto)
+  $('f-walk').onclick = () => {
+    if (lastSt?.walking) sendToGame({ type: 'stopwalk' });
+    else if (walkDest) sendToGame({ type: 'goto', x: walkDest[0], y: walkDest[1] });
+  };
   addEventListener('keydown', (e) => { if (e.key === 'Escape') sendToGame({ type: 'stopwalk' }); });
   $('hunt-toggle').onclick = () => {
     const t = $('hunt-toggle');
@@ -599,11 +881,15 @@ import {
       chrome.storage.session.get('run'),
       chrome.storage.local.get(['espEnabled', 'autoEnabled', 'autoState', 'espCfg'])
     ]);
-    $('led-hold').className = 'led' + (run ? ' on' : '');
-    $('tv-hold').textContent = run ? 'Mantiene ' + run.button.toUpperCase() : 'Suelto';
-    $('ts-hold').textContent = run
-      ? `tab ${run.tabId} · (${Math.round(run.x)}, ${Math.round(run.y)})`
-      : ($('btn').selectedOptions[0].text.toLowerCase() + ' · ' + ($('rep').value || 0) + 'ms');
+    // footer: Mantener <-> Soltar
+    holdRun = run || null;
+    $('f-hold').textContent = run ? '⛔ Soltar mouse' : '🖱 Mantener ' + $('btn').selectedOptions[0].text.toLowerCase();
+    $('f-hold').className = 'b grow ' + (run ? 'stp' : 'go');
+    // footer: Parar <-> Reanudar
+    const walking = !!lastSt?.walking;
+    $('f-walk').textContent = walking ? '🚶 Parar movimiento (Esc)' : walkDest ? `▶ Reanudar (${walkDest[0]}, ${walkDest[1]})` : '🚶 Sin destino';
+    $('f-walk').className = 'b grow ' + (walking ? 'stp' : walkDest ? 'blue' : 'stp2');
+    $('f-walk').disabled = !walking && !walkDest;
 
     const zone = $('chatx').value !== '' && $('chaty').value !== '';
     $('led-chat').className = 'led' + (zone ? ' on' : '');
@@ -616,12 +902,17 @@ import {
     $('esp-toggle').className = 'b grow ' + (l.espEnabled ? 'tg-on' : 'tg-off');
 
     const a = l.autoState;
-    $('led-auto').className = 'led' + (l.autoEnabled ? ' on' : '');
-    $('tv-auto').textContent = l.autoEnabled ? 'On' : 'Off';
-    $('ts-auto').textContent = a ? 'fase ' + a.phase : '—';
-    $('auto-toggle').textContent = 'AUTO: ' + (l.autoEnabled ? 'ON' : 'OFF');
-    $('auto-toggle').className = 'b grow ' + (l.autoEnabled ? 'tg-on' : 'tg-off');
-    if (a) $('auto-status').textContent = `fase=${a.phase} · char=${a.charLevel} · lv=${a.lv} · map=${a.map} · ${a.cls}`;
+    const on = !!l.autoEnabled;
+    $('auto-toggle').classList.toggle('on', on);
+    $('auto-lbl').textContent = on ? 'ON' : 'OFF';
+    $('auto-status').textContent = a ? `${a.phase} · char ${a.charLevel} · lv ${a.lv} · m${a.map} · ${a.cls}` : (on ? 'iniciando…' : 'detenido');
+    if (prevAuto && on !== prevAuto.on) ev('Auto ' + (on ? 'ON' : 'OFF'), on ? 'ok' : 'warn', true);
+    else if (prevAuto && on && a && a.phase !== prevAuto.phase) ev('Auto: fase ' + a.phase, 'ok', true);
+    if (a && prevAuto?.lvl != null && a.charLevel !== prevAuto.lvl) {
+      if (a.charLevel < prevAuto.lvl) ev('reset · nivel ' + a.charLevel, 'warn', true);
+      else if (a.charLevel % 10 === 0) ev('nivel ' + a.charLevel, 'ok');
+    }
+    prevAuto = { on, phase: a?.phase, lvl: a?.charLevel };
     // hunt tile
     const h = lastSt?.hunt;   // lastSt ya lo actualizas en el loop
     const running = !!h?.active;
@@ -637,6 +928,9 @@ import {
     $('hunt-toggle').textContent = running ? '⏹ Parar cacería' : '▶ Empezar cacería';
     $('hunt-toggle').className = 'b grow ' + (running ? 'stp' : 'go');
     $('hunt-toggle').dataset.running = running ? '1' : '0';
+    if (prevHunt != null && running !== prevHunt) ev('cacería ' + (running ? 'iniciada' : 'detenida'), running ? 'ok' : 'warn', true);
+    if (running && kills && kills !== prevKills && kills % 10 === 0) ev(kills + ' kills de cacería', 'ok');
+    prevHunt = running; prevKills = kills;
 
     if (running) {
       const t = h.target ? `objetivo: ${h.target.n} (${h.target.x},${h.target.y})` : '';
@@ -669,19 +963,27 @@ import {
         $('hud').textContent = 'Abre la pestaña del juego… camina un poco.';
         $('hud').classList.remove('err');
         $('cals').replaceChildren();
-        $('pl-count').textContent = '0 visibles';
+        $('pl-count').textContent = '0';
+        $('rd-mobs').textContent = '—';
         $('radar-container').innerHTML = '<div class="empty">Sin datos aún.</div>';
         $('led-radar').className = 'led';
         $('tv-radar').textContent = 'Sin datos';
         $('ts-radar').textContent = '—';
+        document.body.classList.remove('alert');
         return;
       }
 
       lastSt = st;
+      // Puntos libres del juego: si los sabemos, el cuadro se actualiza solo
+      // (así el slider y los botones ✎ reparten siempre lo que queda de verdad).
+      livePts = st.pts > 0 ? st.pts : 0;
+      if (livePts > 0 && +$('pts').value !== livePts) $('pts').value = livePts;
+      updatePtsUI();
+      if (st.walking && st.route?.length) walkDest = st.route[st.route.length - 1];
       if (st.map !== prevMapSeen) {
         if (prevMapSeen != null) ev('cambio a mapa m' + st.map, 'warn');
         prevMapSeen = st.map;
-        rerenderChips();
+        paintLists(true);
       }
 
 
@@ -691,6 +993,8 @@ import {
       $('ts-routes').textContent = rr
         ? rr.steps.length + ' paso' + (rr.steps.length === 1 ? '' : 's')
         : 'sin ruta';
+      $('rd-route').textContent = rr ? rr.name : '—';
+      $('rd-route-n').textContent = $('ts-routes').textContent;
       const watch = splitNames($('watchlist').value).map(s => s.toLowerCase());
       const minDist = +$('radar-dist').value || 0;
       const ttl = Math.max(3, +$('radar-ttl').value || 15);
@@ -709,43 +1013,68 @@ import {
         heatAt = Date.now();
         const raw = (await chrome.storage.local.get('heat:' + st.map))['heat:' + st.map];
         heatMap = st.map;
-        const decoded = decodeHeat(raw);
+        const decoded = decodeHeat(raw, heatOf(st.map));
+        paintHeatChip();
         heatImg = decoded.img;
         heatSpots = decoded.spots;
-        rerenderChips();
+        paintLists(true);
       }
+      paintLists(false);
 
-      // dibujo
+      // rastro (se corta en teletransportes / cambio de mapa)
+      if (st.map !== trailMap) { trail.length = 0; trailMap = st.map; }
+      const lt = trail[trail.length - 1];
+      if (lt && Math.hypot(lt[0] - st.me.x, lt[1] - st.me.y) > 15) trail.length = 0;
+      if (!lt || lt[0] !== st.me.x || lt[1] !== st.me.y) { trail.push([st.me.x, st.me.y]); if (trail.length > 150) trail.shift(); }
+
+      // dibujo (con capas y zoom; la ventana sigue al jugador)
+      const z = ZOOMS[zoomIdx], v = 256 / z, half = v / 2;
+      view.x = Math.max(half, Math.min(256 - half, st.me.x));
+      view.y = Math.max(half, Math.min(256 - half, st.me.y));
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      if (z !== 1) { g.clearRect(0, 0, 256, 256); g.translate(128, 128); g.scale(z, z); g.translate(-view.x, -view.y); }
       drawMap($('map'), {
-        terrain, heatImg,
-        mobs: st.mobs, players: lista, watch,
-        route: st.route, routeIdx: st.routeIdx,
-        me: st.me, heatSpots
+        terrain, heatImg: heatOf(st.map) !== 'off' ? heatImg : null,
+        mobs: LAYERS.mobs ? st.mobs : [], players: LAYERS.jug ? lista : [], watch,
+        route: LAYERS.ruta ? st.route : undefined, routeIdx: st.routeIdx,
+        me: st.me, heatSpots: LAYERS.spots ? heatSpots : []
       });
+      if (LAYERS.rastro && trail.length > 1) {
+        g.lineWidth = 1;
+        for (let i = 1; i < trail.length; i++) {
+          g.strokeStyle = `rgba(63,185,80,${0.15 + 0.7 * i / trail.length})`;
+          g.beginPath(); g.moveTo(trail[i - 1][0] + .5, trail[i - 1][1] + .5); g.lineTo(trail[i][0] + .5, trail[i][1] + .5); g.stroke();
+        }
+      }
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      if (curSheet) $('mini').getContext('2d').drawImage($('map'), 0, 0);   // mini mapa dentro de la hoja
 
-      // etiquetas de alerta sobre el mapa
+      // etiquetas de alerta sobre el mapa (respetan el zoom)
       $('cals').replaceChildren(...hits.slice(0, 4).map((p) => {
+        const fx = (p.x - (view.x - half)) / v, fy = (p.y - (view.y - half)) / v;
+        if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
         const d = document.createElement('div');
-        const lx = (255 - p.x) / 256 * 100;
+        const lx = (1 - fx) * 100;   // espejado por CSS
         d.className = 'cal';
         d.textContent = p.n + ' · ' + p.dist + 't';
-        d.style.top = `calc(${p.y / 256 * 100}% - 22px)`;
+        d.style.top = `calc(${fy * 100}% - 22px)`;
         if (lx > 60) d.style.right = (100 - lx) + '%';
         else d.style.left = lx + '%';
         return d;
-      }));
+      }).filter(Boolean));
 
       // log
       const nowHits = new Set(hits.map((p) => p.n));
-      hits.forEach((p) => { if (!prevHits.has(p.n)) ev(p.n + ' entró a ' + p.dist + 't', 'bad'); });
-      prevHits.forEach((n) => { if (!nowHits.has(n)) ev(n + ' salió', 'warn'); });
+      hits.forEach((p) => { if (!prevHits.has(p.n)) ev(p.n + ' entró a ' + p.dist + 't', 'bad', true); });
+      prevHits.forEach((n) => { if (!nowHits.has(n)) ev(n + ' salió', 'warn', true); });
       prevHits = nowHits;
       if (st.walking && !prevWalking) ev('autowalk' + (st.route?.length ? ' → (' + st.route[st.route.length - 1].join(',') + ')' : ' iniciado'), 'ok');
       if (!st.walking && prevWalking) ev('autowalk terminó', 'warn');
       prevWalking = !!st.walking;
 
       // cabecera / hud / radar tile
-      $('hdr').textContent = (st.map != null ? 'm' + st.map + ' · ' : '') + 'pos (' + st.me.x + ', ' + st.me.y + ') ' + (st.me.auto ? 'auto' : 'manual');
+      $('hdr').textContent = (st.map != null ? 'm' + st.map + ' · ' : '') + st.me.x + ', ' + st.me.y + (st.me.auto ? '' : ' manual');
+      $('rd-mobs').textContent = st.mobs?.length ?? 0;
 
       // simulación status
       if (st.sim) {
@@ -790,9 +1119,13 @@ import {
       $('led-radar').className = 'led ' + (hits.length ? 'al' : 'on');
       $('tv-radar').textContent = hits.length + ' vigilado' + (hits.length === 1 ? '' : 's');
       $('ts-radar').textContent = `alerta ${minDist}t · ttl ${ttl}s`;
+      document.body.classList.toggle('alert', hits.length > 0);
+      $('mini-info').className = 'mi' + (hits.length ? ' al' : '');
+      $('mini-info').textContent = `m${st.map ?? '?'} · ${st.me.x}, ${st.me.y}\n${st.mobs?.length ?? 0} mobs · ${lista.length} jug\n` +
+        (hits.length ? `⚠ ${hits[0].n} ${hits[0].dist}t` + (hits.length > 1 ? ` (+${hits.length - 1})` : '') : 'sin vigilados cerca');
 
       // tabla
-      $('pl-count').textContent = lista.length + ' visible' + (lista.length === 1 ? '' : 's');
+      $('pl-count').textContent = lista.length;
       renderPlayersTable($('radar-container'), lista, {
         watch, minDist, ttl,
         onGo: (x, y) => sendToGame({ type: 'goto', x, y }),
@@ -801,6 +1134,7 @@ import {
     } catch (e) {
       $('hud').textContent = 'Error: ' + e.message;
       $('hud').classList.add('err');
+      if (e.message !== lastErr) { lastErr = e.message; ev('Error: ' + e.message, 'bad', true); }
       console.error(e);
     } finally {
       busy = false;

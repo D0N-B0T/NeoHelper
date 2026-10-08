@@ -8,266 +8,327 @@
 </head>
 
 <body>
-  <header>
-    <h1>📡 MU toolkit</h1>
-    <span id="hdr">sin datos</span>
+  <header class="hd">
+    <button id="auto-toggle" class="sw" title="Auto farmeo ON/OFF"><i></i><b id="auto-lbl">OFF</b></button>
+    <div class="st">
+      <div class="lb">Auto</div>
+      <div id="auto-status" class="st-s">—</div>
+    </div>
+    <div class="ps" id="hdr">sin datos</div>
+    <button class="b ic" data-s="auto" title="Usuario, password y niveles">⚙️</button>
   </header>
 
-  <main class="top">
-    <section>
-      <div class="mapw">
-        <canvas id="map" width="256" height="256"></canvas>
-        <div id="cals"></div>
-        <div id="hud">Esperando datos del juego…</div>
-      </div>
-      <div id="chips" class="chips"></div>
-    </section>
+  <div class="bd">
+    <nav class="rail" id="rail">
+      <button class="rb act" data-s="radar" title="Radar (vista principal)"><i class="led"
+          id="led-radar"></i>📡</button>
+      <button class="rb" data-s="esp" title="ESP"><i class="led" id="led-esp"></i>👁</button>
+      <button class="rb" data-s="hunt" title="Caza"><i class="led" id="led-hunt"></i>🎯</button>
+      <button class="rb" data-s="routes" title="Rutas"><i class="led" id="led-routes"></i>🧭</button>
+      <button class="rb" data-s="sim" title="Simulación"><i class="led" id="led-sim"></i>🧪</button>
+      <button class="rb" data-s="chat" title="Chat"><i class="led" id="led-chat"></i>💬</button>
+      <button class="rb" data-s="ranking" title="Ranking del servidor"><i class="led" id="led-rank"></i>🏆</button>
+    </nav>
 
-    <section>
-      <div class="sec">Jugadores <span id="pl-count">0 visibles</span></div>
-      <div id="radar-container">
-        <div class="empty">Sin datos aún.</div>
-      </div>
-
-      <div class="r mt">
-        <input id="goto-x" type="number" placeholder="X">
-        <input id="goto-y" type="number" placeholder="Y">
-        <button id="goto-btn" class="b go">Ir</button>
-      </div>
-
-      <div class="sec mt2">Registro <span>últimos eventos</span></div>
-      <div id="evlog">
-        <div class="empty">Sin eventos.</div>
-      </div>
-    </section>
-  </main>
-
-  <div class="keys" id="qgrid"></div>
-
-  <div class="tiles">
-    <button class="tile" data-p="hold">
-      <div class="tn"><i class="led" id="led-hold"></i>Hold</div>
-      <div class="tv" id="tv-hold">Suelto</div>
-      <div class="ts" id="ts-hold">—</div>
-    </button>
-    <button class="tile" data-p="chat">
-      <div class="tn"><i class="led" id="led-chat"></i>Chat</div>
-      <div class="tv">Chat</div>
-      <div class="ts" id="ts-chat">sin zona</div>
-    </button>
-    <button class="tile" data-p="radar">
-      <div class="tn"><i class="led" id="led-radar"></i>Radar</div>
-      <div class="tv" id="tv-radar">Sin datos</div>
-      <div class="ts" id="ts-radar">—</div>
-    </button>
-    <button class="tile" data-p="esp">
-      <div class="tn"><i class="led" id="led-esp"></i>ESP</div>
-      <div class="tv" id="tv-esp">Off</div>
-      <div class="ts" id="ts-esp">—</div>
-    </button>
-    <button class="tile" data-p="auto">
-      <div class="tn"><i class="led" id="led-auto"></i>Auto</div>
-      <div class="tv" id="tv-auto">Off</div>
-      <div class="ts" id="ts-auto">—</div>
-    </button>
-    <button class="tile" data-p="hunt">
-      <div class="tn"><i class="led" id="led-hunt"></i>Caza</div>
-      <div class="tv" id="tv-hunt">Off</div>
-      <div class="ts" id="ts-hunt">—</div>
-    </button>
-    <button class="tile" data-p="routes">
-      <div class="tn"><i class="led" id="led-routes"></i>Rutas</div>
-      <div class="tv" id="tv-routes">—</div>
-      <div class="ts" id="ts-routes">sin ruta</div>
-    </button>
-    <button class="tile" data-p="sim">
-      <div class="tn"><i class="led" id="led-sim"></i>Sim</div>
-      <div class="tv" id="tv-sim">Off</div>
-      <div class="ts" id="ts-sim">—</div>
-    </button>
-  </div>
-
-  <div class="insp">
-    <div class="p" id="p-hold">
-      <div class="row2">
-        <div><label>Botón a mantener</label>
-          <select id="btn">
-            <option value="right">Derecho</option>
-            <option value="left">Izquierdo</option>
-            <option value="middle">Central</option>
-          </select>
+    <main class="mn">
+      <div class="top">
+        <div class="mapw">
+          <canvas id="map" width="256" height="256"></canvas>
+          <div id="cals"></div>
+          <div id="hud">Esperando datos del juego…</div>
         </div>
-        <div><label>Re-apretar cada (ms, 0 = solo hold)</label><input id="rep" type="number" min="0"></div>
-      </div>
-      <label>Posición X / Y (vacío = centro)</label>
-      <div class="r">
-        <input id="x" type="number" placeholder="x">
-        <input id="y" type="number" placeholder="y">
-        <button id="pick-hold" class="b blue" title="Haz clic sobre el punto del juego">🎯 Marcar</button>
-        <button id="go" class="b go">Mantener</button>
-        <button id="stop" class="b stp">Soltar</button>
-      </div>
-    </div>
-
-    <div class="p" id="p-chat">
-      <label>Chat rápido (vacío = solo Enter)</label>
-      <div class="r">
-        <input id="chat" type="text" placeholder="hola / !comando" autocomplete="off">
-        <button id="chat-send" class="b ok" title="Pausa ataque → Enter → escribe → Enter → reanuda ataque">💬
-          Enviar</button>
-        <button id="ranking-btn" class="b ok" title="Envía /ranking al chat del juego">🏆 Ranking</button>
-
-      </div>
-      <div class="row2">
-        <div><label>Zona de chat X / Y (vacío = abrir con Enter)</label>
-          <div class="r"><input id="chatx" type="number" placeholder="X"><input id="chaty" type="number"
-              placeholder="Y"><button id="chat-pick" class="b blue"
-              title="Haz clic sobre la caja de chat del juego">🎯</button></div>
-        </div>
-        <div><label>Puntos rápidos /add</label>
-          <div class="r"><input id="pts" type="number" min="1" placeholder="Cant." style="width:64px">
-            <div id="stat-grid" class="r grow"></div>
+        <div class="rd">
+          <div class="kv">
+            <div class="k">Mobs</div>
+            <div class="v" id="rd-mobs">—</div>
+          </div>
+          <div class="kv">
+            <div class="k">Jugadores</div>
+            <div class="v"><span id="tv-radar">Sin datos</span></div>
+            <div class="s" id="ts-radar">—</div>
+          </div>
+          <div class="kv">
+            <div class="k">Spot cercano</div>
+            <div class="v sm"><span id="rd-spot">—</span> <small id="rd-spot-d"></small></div>
+          </div>
+          <div class="kv">
+            <div class="k">Ruta</div>
+            <div class="v sm" id="rd-route">—</div>
+            <div class="s" id="rd-route-n"></div>
           </div>
         </div>
       </div>
-      <div class="row2">
-        <div><label>Auto /reset al nivel (0 = off)</label><input id="resetlv" type="number" min="0" placeholder="400">
-          <label>Resets manuales (base)</label>
-          <input id="reset-base" type="number" min="0" placeholder="0">
 
-        </div>
-
+      <div class="lay" id="layers">
+        <button class="b ly" data-l="mobs" title="Mobs en el mapa">Mob</button>
+        <button class="b ly" data-l="jug" title="Jugadores en el mapa">Jug</button>
+        <button class="b ly" data-l="spots" title="Marcadores de spots">Spot</button>
+        <button id="heat-mode" class="b ly"
+          title="Heatmap: núcleos / tenue / completo / off (se recuerda por mapa)">Calor: núcleos</button>
+        <button class="b ly" data-l="ruta" title="Ruta">Ruta</button>
+        <button class="b ly" data-l="rastro" title="Rastro del recorrido">Rastro</button>
+        <span class="grow"></span>
+        <button id="zoom-out" class="b ly" title="Alejar (rueda del mouse)">−</button>
+        <button id="zoom-reset" class="b ly" title="Zoom · clic = 1×">1×</button>
+        <button id="zoom-in" class="b ly" title="Acercar (rueda del mouse)">+</button>
       </div>
-    </div>
 
-    <div class="p" id="p-radar">
-      <label>Jugadores a vigilar (separados por coma)</label>
-      <input id="watchlist" type="text" placeholder="DarkLord, MG, Sniper" autocomplete="off">
-      <div class="row2">
-        <div><label>Distancia mín. p/ alertar (tiles)</label><input id="radar-dist" type="number" min="0" value="0">
-        </div>
-        <div><label>Desaparecido tras (seg)</label><input id="radar-ttl" type="number" min="3" value="15"></div>
-        <div><label>Mi pos X (si no se detecta)</label><input id="me-x" type="number" value="226"></div>
-        <div><label>Mi pos Y</label><input id="me-y" type="number" value="236"></div>
+      <div class="tabs" id="tabs">
+        <button class="tb act" data-t="spots">Spots <em id="spots-count">0</em></button>
+        <button class="tb" data-t="lug">Lugares <em id="locs-count">0</em></button>
+        <button class="tb" data-t="jug">Jugadores <em id="pl-count">0</em></button>
+        <button class="tb" data-t="log" id="tab-log">Registro</button>
       </div>
-    </div>
 
-    <div class="p" id="p-esp">
-      <div class="r"><button id="esp-toggle" class="b grow">ESP: OFF</button><button id="esp-save"
-          class="b">Guardar</button></div>
-      <div class="row2">
-        <div><label>Distancia máxima (0 = sin límite)</label><input id="esp-max-dist" type="number" min="0"></div>
-        <div><label>Solo estos nombres</label><input id="esp-names" type="text" placeholder="coma" autocomplete="off">
-        </div>
-        <div><label>Ocultar estos nombres</label><input id="esp-black" type="text" placeholder="coma"
-            autocomplete="off"></div>
-      </div>
-    </div>
-
-    <div class="p" id="p-auto">
-      <div class="r"><button id="auto-toggle" class="b grow">AUTO: OFF</button><button id="auto-save"
-          class="b">Guardar</button></div>
-      <div class="row2">
-        <div><label>Usuario</label><input id="auto-user" type="text"></div>
-        <div><label>Password</label><input id="auto-pass" type="password"></div>
-        <div><label>Personaje</label><input id="auto-char" type="text" placeholder="MGNoPk"></div>
-        <div><label>Lv icarus GM / otras</label>
-          <div class="r"><input id="auto-lv-gm" type="number" placeholder="113"><input id="auto-lv-def" type="number"
-              placeholder="170"></div>
-        </div>
-      </div>
-      <div id="auto-status" class="note">—</div>
-    </div>
-    <div class="p" id="p-hunt">
-      <div class="row2">
-        <div>
-          <label>Mapa objetivo</label>
-          <select id="hunt-map">
-            <option value="0">Lorencia</option>
-            <option value="2">Devias</option>
-            <option value="3">Noria</option>
-            <option value="7">Atlans</option>
-            <option value="8">Tarkan</option>
-          </select>
-        </div>
-        <div>
-          <label>Radio de detección (tiles)</label>
-          <input id="hunt-radius" type="number" min="5" value="40">
+      <div class="pane" id="pane-spots">
+        <div id="spots-list" class="lst">
+          <div class="empty">Sin spots en este mapa.</div>
         </div>
       </div>
 
-      <label>Goldens a cazar (los del mapa elegido)</label>
-      <div id="hunt-list" class="chips" style="max-height:120px"></div>
-
-      <div class="row2 mt">
-        <div>
-          <label>Separación del sweep (tiles)</label>
-          <input id="hunt-salt" type="number" min="4" max="40" value="12">
+      <div class="pane" id="pane-lug" hidden>
+        <div class="r mb">
+          <button id="save-cur" class="b blue grow" title="Guarda tu posición actual">📍 Guardar actual</button>
+          <button id="save-as" class="b grow" title="Guarda tu posición con nombre">✏️ Guardar como…</button>
         </div>
-        <div>
-          <label>Recoger drops</label>
-          <select id="hunt-loot">
-            <option value="1">Sí (Space)</option>
-            <option value="0">No</option>
-          </select>
+        <div id="locs-list" class="lst">
+          <div class="empty">Sin ubicaciones guardadas.</div>
         </div>
       </div>
 
-      <div class="r mt">
-        <button id="hunt-toggle" class="b grow go">▶ Empezar cacería</button>
+      <div class="pane" id="pane-jug" hidden>
+        <div class="r mb">
+          <input id="goto-x" type="number" placeholder="X">
+          <input id="goto-y" type="number" placeholder="Y">
+          <button id="goto-btn" class="b go">Ir</button>
+        </div>
+        <div id="radar-container">
+          <div class="empty">Sin datos aún.</div>
+        </div>
+        <details class="cfg">
+          <summary>Vigilancia</summary>
+          <label>Jugadores a vigilar (separados por coma)</label>
+          <input id="watchlist" type="text" placeholder="DarkLord, MG, Sniper" autocomplete="off">
+          <div class="row2">
+            <div><label>Distancia mín. p/ alertar (tiles)</label><input id="radar-dist" type="number" min="0" value="0">
+            </div>
+            <div><label>Desaparecido tras (seg)</label><input id="radar-ttl" type="number" min="3" value="15"></div>
+            <div><label>Mi pos X (si no se detecta)</label><input id="me-x" type="number" value="226"></div>
+            <div><label>Mi pos Y</label><input id="me-y" type="number" value="236"></div>
+          </div>
+        </details>
       </div>
 
-      <div id="hunt-status" class="note">—</div>
-    </div>
-    <div class="p" id="p-routes">
-      <label>Ruta activa</label>
-      <div class="r">
-        <select id="route-active" class="grow"></select>
-        <button id="route-new" class="b blue">+ Nueva</button>
+      <div class="pane" id="pane-log" hidden>
+        <div id="evlog">
+          <div class="empty">Sin eventos.</div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="sheet" id="sheet">
+      <div class="sh"><span id="sht"></span><button id="shx" class="b ic" title="Cerrar">✕</button></div>
+      <div class="mini"><canvas id="mini" width="256" height="256"></canvas>
+        <div class="mi" id="mini-info">—</div>
       </div>
 
-      <label class="mt">Pasos de la ruta</label>
-      <div id="route-steps" style="max-height:260px;overflow-y:auto"></div>
+      <div class="p" id="p-chat">
+        <div class="sum"><span id="ts-chat">sin zona</span></div>
+        <label>Chat rápido (vacío = solo Enter)</label>
+        <div class="r">
+          <input id="chat" type="text" placeholder="hola / !comando" autocomplete="off">
+          <button id="chat-send" class="b ok" title="Pausa ataque → Enter → escribe → Enter → reanuda ataque">💬
+            Enviar</button>
+          <button id="ranking-btn" class="b ok" title="Consulta la API de ranking y abre la tabla">🏆 Ranking</button>
+        </div>
+        <div class="row2">
+          <div><label>Zona de chat X / Y (vacío = abrir con Enter)</label>
+            <div class="r"><input id="chatx" type="number" placeholder="X"><input id="chaty" type="number"
+                placeholder="Y"><button id="chat-pick" class="b blue"
+                title="Haz clic sobre la caja de chat del juego">🎯</button></div>
+          </div>
+          <div><label>Puntos rápidos /add</label>
+            <div class="r"><input id="pts" type="number" min="1" placeholder="Cant." style="width:64px">
+              <div id="stat-grid" class="r grow"></div>
+            </div>
+            <div class="r mt"><label for="pts-slider">Repartir</label>
+              <input id="pts-slider" type="range" min="0" max="100" value="0" step="1" class="grow">
+              <b id="pts-live" class="pv">100%</b>
+            </div>
+            <div class="r mt">
+              <button id="pts-apply" class="b go grow" disabled>▶ Repartir</button>
+              <button id="pts-max" class="b blue">MAX</button>
+            </div>
+            <div class="note" id="pts-note">Sin puntos detectados.</div>
+          </div>
+        </div>
+        <div class="row2">
+          <div><label>Auto /reset al nivel (0 = off)</label><input id="resetlv" type="number" min="0" placeholder="400">
+            <label>Resets manuales (base)</label>
+            <input id="reset-base" type="number" min="0" placeholder="0">
 
-      <div class="r mt">
-        <button id="route-add-step" class="b blue grow">+ Añadir paso</button>
-        <button id="route-delete" class="b stp2">🗑 Borrar ruta</button>
-      </div>
+          </div>
 
-      <label class="mt">Nombre de la ruta</label>
-      <input id="route-name" type="text" placeholder="Farm estándar">
-
-      <div class="note" id="route-info">—</div>
-    </div>
-    <div class="p" id="p-sim">
-      <label>Modo Simulación</label>
-      <div class="r mt">
-        <button id="sim-toggle" class="b grow">SIM: OFF</button>
-        <button id="sim-export" class="b blue">📥 Exportar datos</button>
-      </div>
-
-      <div class="row2 mt">
-        <div>
-          <label>Grid step (tiles)</label>
-          <input id="sim-grid-step" type="number" min="2" max="20" value="12">
         </div>
       </div>
 
-      <div class="note" id="sim-status">Detenido. Modo: —</div>
-      <div class="note" id="sim-stats">Mapa: — | Progreso: 0/0</div>
 
-      <div class="sec mt2">Datos en vivo <span id="sim-data-age">—</span></div>
-      <div id="sim-live"
-        style="background:#010409;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font:11px/1.5 ui-monospace,Consolas,monospace">
-        <div style="color:#8b949e">Sin datos todavía. Arranca la simulación.</div>
+      <div class="p" id="p-esp">
+        <div class="sum"><b id="tv-esp">Off</b><span id="ts-esp">—</span></div>
+        <div class="r"><button id="esp-toggle" class="b grow">ESP: OFF</button><button id="esp-save"
+            class="b">Guardar</button></div>
+        <div class="row2">
+          <div><label>Distancia máxima (0 = sin límite)</label><input id="esp-max-dist" type="number" min="0"></div>
+          <div><label>Solo estos nombres</label><input id="esp-names" type="text" placeholder="coma" autocomplete="off">
+          </div>
+          <div><label>Ocultar estos nombres</label><input id="esp-black" type="text" placeholder="coma"
+              autocomplete="off"></div>
+        </div>
       </div>
-      <div id="sim-mobs" style="margin-top:6px;display:flex;flex-direction:column;gap:3px"></div>
-    </div>
+
+      <div class="p" id="p-hunt">
+        <div class="sum"><b id="tv-hunt">Off</b><span id="ts-hunt">—</span></div>
+        <div class="row2">
+          <div>
+            <label>Mapa objetivo</label>
+            <select id="hunt-map">
+              <option value="0">Lorencia</option>
+              <option value="2">Devias</option>
+              <option value="3">Noria</option>
+              <option value="7">Atlans</option>
+              <option value="8">Tarkan</option>
+            </select>
+          </div>
+          <div>
+            <label>Radio de detección (tiles)</label>
+            <input id="hunt-radius" type="number" min="5" value="40">
+          </div>
+        </div>
+
+        <label>Goldens a cazar (los del mapa elegido)</label>
+        <div id="hunt-list" class="chips" style="max-height:120px"></div>
+
+        <div class="row2 mt">
+          <div>
+            <label>Separación del sweep (tiles)</label>
+            <input id="hunt-salt" type="number" min="4" max="40" value="12">
+          </div>
+          <div>
+            <label>Recoger drops</label>
+            <select id="hunt-loot">
+              <option value="1">Sí (Space)</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="r mt">
+          <button id="hunt-toggle" class="b grow go">▶ Empezar cacería</button>
+        </div>
+
+        <div id="hunt-status" class="note">—</div>
+      </div>
+      <div class="p" id="p-routes">
+        <div class="sum"><b id="tv-routes">Off</b><span id="ts-routes">—</span></div>
+        <label>Ruta activa</label>
+        <div class="r">
+          <select id="route-active" class="grow"></select>
+          <button id="route-new" class="b blue">+ Nueva</button>
+        </div>
+
+        <label class="mt">Pasos de la ruta</label>
+        <div id="route-steps" style="max-height:260px;overflow-y:auto"></div>
+
+        <div class="r mt">
+          <button id="route-add-step" class="b blue grow">+ Añadir paso</button>
+          <button id="route-delete" class="b stp2">🗑 Borrar ruta</button>
+        </div>
+
+        <label class="mt">Nombre de la ruta</label>
+        <input id="route-name" type="text" placeholder="Farm estándar">
+
+        <div class="note" id="route-info">—</div>
+      </div>
+      <div class="p" id="p-sim">
+        <div class="sum"><b id="tv-sim">Off</b><span id="ts-sim">—</span></div>
+        <label>Modo Simulación</label>
+        <div class="r mt">
+          <button id="sim-toggle" class="b grow">SIM: OFF</button>
+          <button id="sim-export" class="b blue">📥 Exportar datos</button>
+        </div>
+
+        <div class="row2 mt">
+          <div>
+            <label>Grid step (tiles)</label>
+            <input id="sim-grid-step" type="number" min="2" max="20" value="12">
+          </div>
+        </div>
+
+        <div class="note" id="sim-status">Detenido. Modo: —</div>
+        <div class="note" id="sim-stats">Mapa: — | Progreso: 0/0</div>
+
+        <div class="sec mt2">Datos en vivo <span id="sim-data-age">—</span></div>
+        <div id="sim-live"
+          style="background:#010409;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font:11px/1.5 ui-monospace,Consolas,monospace">
+          <div style="color:#8b949e">Sin datos todavía. Arranca la simulación.</div>
+        </div>
+        <div id="sim-mobs" style="margin-top:6px;display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+
+      <div class="p" id="p-ranking">
+        <div class="sum"><b id="tv-ranking">🏆 Ranking</b><span id="ts-ranking">—</span></div>
+        <div class="r mb">
+          <div class="rk-tabs grow" id="rk-tabs">
+            <button class="b act" data-v="resets">Resets</button>
+            <button class="b" data-v="elo">ELO</button>
+          </div>
+          <button id="rank-reload" class="b blue" title="Actualizar ahora (auto cada 5 min)">↻</button>
+        </div>
+        <div id="rk-updated" class="rk-updated"></div>
+        <div id="rk-list" class="rk-list">
+          <div class="empty">Sin datos. Pulsa ↻ o 🏆 Ranking.</div>
+        </div>
+      </div>
+
+      <div class="p" id="p-auto">
+        <div class="row2">
+          <div><label>Usuario</label><input id="auto-user" type="text"></div>
+          <div><label>Password</label><input id="auto-pass" type="password"></div>
+          <div><label>Personaje</label><input id="auto-char" type="text" placeholder="MGNoPk"></div>
+          <div><label>Lv icarus GM / otras</label>
+            <div class="r"><input id="auto-lv-gm" type="number" placeholder="113"><input id="auto-lv-def" type="number"
+                placeholder="170"></div>
+          </div>
+        </div>
+        <div class="r mt"><button id="auto-save" class="b blue grow">Guardar</button></div>
+      </div>
+
+      <div class="p" id="p-hold">
+        <div class="row2">
+          <div><label>Botón a mantener</label>
+            <select id="btn">
+              <option value="right">Derecho</option>
+              <option value="left">Izquierdo</option>
+              <option value="middle">Central</option>
+            </select>
+          </div>
+          <div><label>Re-apretar cada (ms, 0 = solo hold)</label><input id="rep" type="number" min="0"></div>
+        </div>
+        <label>Posición X / Y (vacío = centro)</label>
+        <div class="r">
+          <input id="x" type="number" placeholder="x">
+          <input id="y" type="number" placeholder="y">
+          <button id="pick-hold" class="b blue" title="Haz clic sobre el punto del juego">🎯 Marcar</button>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <footer>
-    <button id="f-stop" class="b stp">⛔ Soltar mouse</button>
-    <button id="walk-stop" class="b stp2">🚶 Parar movimiento (Esc)</button>
+    <button id="f-hold" class="b grow go">🖱 Mantener</button>
+    <button class="b ic" data-s="hold" title="Ajustes de hold (botón, repetición, posición)">⚙️</button>
+    <button id="f-walk" class="b grow stp2" disabled>🚶 Sin destino</button>
+    <div id="tick" class="tick">Sin eventos.</div>
   </footer>
 
   <script type="module" src="popup.js"></script>

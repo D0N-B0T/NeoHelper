@@ -64,7 +64,7 @@ export function decodeTerrain(b64) {
 }
 
 // ---------- decodificación de heatmap + spots ----------
-export function decodeHeat(raw) {
+export function decodeHeat(raw, mode = 'completo') {   // mode: completo | tenue | nucleos
     if (!raw) return { img: null, spots: [], names: [] };
     const o = JSON.parse(raw);
     const dec = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
@@ -74,9 +74,24 @@ export function decodeHeat(raw) {
     const best = new Int32Array(1024).fill(-1);
     const nm = Array.from({ length: 1024 }, () => ({}));
 
+    // "nucleos": pinta solo el 30% más caliente de las celdas con datos
+    // (en pasillos saturados separa lo realmente bueno). No afecta a los spots.
+    let thr = 0;
+    if (mode === 'nucleos') {
+        const vals = [];
+        for (let k = 0; k < 65536; k++) if (h[k]) vals.push(h[k]);
+        vals.sort((a, b) => a - b);
+        thr = vals[Math.floor(vals.length * 0.7)] || 0;
+    }
+
     for (let k = 0; k < 65536; k++) {
         if (!h[k]) continue;
-        img.data.set([240, 180, 41, Math.min(255, 70 + h[k] * 12)], k * 4);
+        if (h[k] >= thr) {
+            const al = mode === 'tenue' ? Math.min(110, 20 + h[k] * 5)
+                : mode === 'nucleos' ? Math.min(255, 90 + h[k] * 10)
+                    : Math.min(255, 70 + h[k] * 12);
+            img.data.set([240, 180, 41, al], k * 4);
+        }
         const bk = ((k >> 8) >> 3) * 32 + ((k & 255) >> 3);
         sum[bk] += h[k];
         nm[bk][ix[k]] = (nm[bk][ix[k]] || 0) + h[k];
@@ -102,7 +117,16 @@ export function decodeHeat(raw) {
 export function drawMap(canvas, { terrain, heatImg, mobs, players, watch, route, routeIdx, me, heatSpots }) {
     const g = canvas.getContext('2d');
     g.clearRect(0, 0, 256, 256);
-    if (terrain) g.putImageData(terrain, 0, 0);
+    g.imageSmoothingEnabled = false;
+    if (terrain) {   // drawImage (no putImageData) para que el terreno respete el zoom/transform
+        if (!terrain._cv) {
+            const tc = document.createElement('canvas');
+            tc.width = tc.height = 256;
+            tc.getContext('2d').putImageData(terrain, 0, 0);
+            terrain._cv = tc;
+        }
+        g.drawImage(terrain._cv, 0, 0);
+    }
     if (heatImg) g.drawImage(heatImg, 0, 0);
 
     for (const [, x, y] of mobs || []) {
