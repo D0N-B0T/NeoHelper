@@ -402,6 +402,50 @@ import {
     return s < 60 ? `hace ${s}s` : s < 3600 ? `hace ${Math.floor(s / 60)}m` : `hace ${Math.floor(s / 3600)}h`;
   };
 
+  // ---------- ritmo real de resets (para la ETA al top 1) ----------
+  // Opción 1: se lee el histórico de resets que escribe content/stats.js en storage
+  // (resetTimes = timestamps de resets REALES de las últimas 24 h).
+  const rkPace = () => {
+    const r = rkCache.rt || {};
+    const now = Date.now();
+    const last = (r.resetTimes || []).filter((t) => Number.isFinite(+t)).map(Number).sort((a, b) => a - b);
+    const h1 = last.filter((t) => now - t < 3600e3).length;
+    const d1 = last.filter((t) => now - t < 864e5).length;
+    // ritmo: el más rápido de 1h / 24h — suele reflejar tu ritmo real cuando farmeas
+    const perH = Math.max(h1, d1 / 24);
+    let basis = h1 ? '1 h' : '';
+    if (!h1 && d1) basis = '24 h';
+    if (h1 && d1 / 24 > h1) basis = '24 h';
+    // último reset hace >6 h -> no hay sesión activa -> no proyectamos
+    const lastT = last.length ? last[last.length - 1] : 0;
+    const stale = !lastT || now - lastT > 6 * 3600e3;
+    return { perH, basis, stale, count: last.length };
+  };
+
+  const fmtDur = (h) => {
+    if (!Number.isFinite(h)) return '—';
+    if (h < 1) return Math.max(1, Math.round(h * 60)) + ' min';
+    if (h < 24) { const H = Math.floor(h), M = Math.round((h - H) * 60); return M ? `${H}h ${M}m` : `${H}h`; }
+    if (h < 48) return '~1 día';
+    if (h < 720) { const D = Math.floor(h / 24), H = Math.round(h % 24); return H ? `${D} d ${H} h` : `${D} días`; }
+    return Math.floor(h / 24) + ' días';
+  };
+
+  // Lee el histórico la 1ª vez y lo mantiene al día
+  let rkRtSeen = null;
+  chrome.storage.local.get(['resetTimes', 'resetCount']).then((c) => {
+    rkCache.rt = c;
+    if (rkCache.data) renderRanking();
+  }).catch(() => { });
+  chrome.storage.onChanged.addListener((ch, area) => {
+    if (area !== 'local') return;
+    if (!ch.resetTimes && !ch.resetCount) return;
+    rkCache.rt = rkCache.rt || {};
+    if (ch.resetTimes) rkCache.rt.resetTimes = ch.resetTimes.newValue;
+    if (ch.resetCount) rkCache.rt.resetCount = ch.resetCount.newValue;
+    if (rkCache.data && Date.now() - (rkRtSeen || 0) > 30000) { rkRtSeen = Date.now(); renderRanking(); }
+  });
+
   const renderRanking = () => {
     const d = rkCache.data;
     const list = $('rk-list');
@@ -416,11 +460,25 @@ import {
     // línea de estado: antigüedad de los datos + tu puesto y la brecha con el de arriba
     const ago = rkAgo(d.updatedAt || '');
     let info = ago ? 'Actualizado ' + ago : 'Consultado ' + rkAgo(new Date(rkCache.t).toISOString());
+    const pace = rkPace();
     if (myIdx >= 0) {
       const up = all[myIdx - 1];
       info += ` · Tú #${myIdx + 1}` + (up ? ` · faltan ${Math.max(0, up[key] - all[myIdx][key])}${unit} para ${up.name}` : ' · vas primero');
+      // brecha y ETA contra el top 1 (solo con datos de resets)
+      if (myIdx > 0 && rkView === 'resets') {
+        const top = all[0];
+        const gap = Math.max(0, (top.totalResets || 0) - (all[myIdx].totalResets || 0));
+        info += `\nTop 1: ${top.name} (${top.totalResets} R) · te faltan ${gap} R`;
+        info += pace.perH > 0 && !pace.stale
+          ? ` · a ${pace.perH.toFixed(1)} R/h (${pace.basis}) → top 1 en ~${fmtDur(gap / pace.perH)}`
+          : ` · sin ritmo medible (farma con el overlay de stats activo para estimar el tiempo)`;
+      } else if (myIdx === 0) {
+        info += '\nYa eres top 1';
+      }
     }
-    $('rk-updated').textContent = info;
+    const upd = $('rk-updated');
+    upd.textContent = info;
+    upd.style.whiteSpace = 'pre-line';
 
     // cabecera fija + filas en columnas alineadas; tu personaje queda anclado al hacer scroll
     const head = document.createElement('div');

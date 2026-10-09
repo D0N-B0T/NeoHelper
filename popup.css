@@ -840,6 +840,8 @@ select:focus {
     margin: 4px 0 8px;
     font-size: 10px;
     color: #8b949e;
+    white-space: pre-line;
+    line-height: 1.5;
 }
 
 .rk-list {

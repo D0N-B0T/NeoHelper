@@ -27,6 +27,43 @@
         }
     }, true);
 
+    // ---------- layout del overlay ----------
+    const POS_KEY = 'statsPos';
+    const DEF_POS = { x: null, y: 0.5 };   // x: null = mitad derecha, y: mitad inferior
+    let pos = { ...DEF_POS };
+    let dragging = false;
+
+    const clampPos = () => {
+        if (!ov.el) return;
+        const r = ov.el.getBoundingClientRect();
+        const maxX = Math.max(0, innerWidth - r.width);
+        const maxY = Math.max(0, innerHeight - r.height);
+        pos.x = Math.min(Math.max(0, pos.x ?? maxX), maxX);
+        pos.y = Math.min(Math.max(0, pos.y ?? maxY), maxY);
+    };
+
+    const applyPos = () => {
+        if (!ov.el) return;
+        const r = ov.el.getBoundingClientRect();
+        if (pos.x == null) {
+            // mitad derecha: pegado al borde derecho con un margen
+            pos.x = Math.max(0, innerWidth - r.width - 8);
+        }
+        if (pos.y == null) {
+            pos.y = Math.max(0, innerHeight * 0.5);
+        }
+        clampPos();
+        ov.el.style.left = Math.round(pos.x) + 'px';
+        ov.el.style.top = Math.round(pos.y) + 'px';
+    };
+
+    chrome.storage.local.get(POS_KEY).then((c) => {
+        const p = c[POS_KEY];
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) pos = { x: p.x, y: p.y };
+    }).catch(() => { });
+
+    window.addEventListener('resize', () => { if (ov.el) applyPos(); });
+
     // ---------- helpers de formato ----------
     const sh = (n) => Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
         : Math.abs(n) >= 1e3 ? (n / 1e3).toFixed(1) + 'k'
@@ -68,8 +105,9 @@
 
             if (!ov.el) {
                 ov.el = document.createElement('div');
-                ov.el.style.cssText = 'position:fixed;top:8px;left:8px;z-index:2147483646;pointer-events:none;min-width:200px;padding:6px 8px;background:rgba(1,4,9,.82);border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font:11px/1.45 ui-monospace,Consolas,monospace;';
+                ov.el.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483646;pointer-events:auto;cursor:move;touch-action:none;min-width:220px;padding:6px 8px;background:rgba(1,4,9,.82);border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font:11px/1.45 ui-monospace,Consolas,monospace;user-select:none;';
                 document.documentElement.appendChild(ov.el);
+                applyPos();
             }
             if (ov.name !== s.n) Object.assign(ov, { name: s.n, exp0: s.exp, zen0: s.zen, t0: now, samples: [] });
 
@@ -115,6 +153,8 @@
             const pct = s.next > s.cur ? (s.exp - s.cur) / (s.next - s.cur) * 100 : 0;
             const ses = (now - ov.t0) / 60000;
             const nm = String(s.n).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+            const expPct = (s.next > s.cur ? (s.exp - s.cur) / (s.next - s.cur) * 100 : 0).toFixed(1);
+            const lvEta = eta > 0 && eta < 100 ? Math.floor(eta) + 'h ' + Math.round(eta % 1 * 60) + 'm' : '—';
 
             const sendChat = async (text) => {
                 await chrome.runtime.sendMessage({ target: 'bg', type: 'chat', text }).catch(() => { });
@@ -169,26 +209,71 @@
             const rLastHour = (ov.resetTimes || []).filter(t => now - t < 3600 * 1000).length;
             const rLastDay = (ov.resetTimes || []).filter(t => now - t < 24 * 3600 * 1000).length;
 
-            ov.el.innerHTML =
+            // ---- CABECERA: personaje + nivel + estado ----
+            const head =
                 (s.lost ? '<div style="color:#fff;background:#da3633;text-align:center;font-weight:700;margin-bottom:3px">DESCONECTADO</div>' : '') +
-                `<div style="color:#f0b429;font-weight:700">${nm} · Lv ${s.lv}${s.ml ? ' +' + s.ml : ''}</div>` +
+                `<div style="color:#f0b429;font-weight:700;margin-bottom:1px">${nm} · Lv ${s.lv}${s.ml ? ' +' + s.ml : ''}</div>`;
+
+            // ---- 1. PROGRESO DE NIVEL (lo primero que se mira) ----
+            const secLevel =
+                row('EXP', expPct + '%') + bar(s.exp - s.cur, s.next - s.cur, '#58a6ff') +
+                row('EXP/h (10m)', ok ? sh(expH) : '…') +
+                row('Próx. nivel', lvEta);
+
+            // ---- 2. RESET: meta, ETA y estadísticas juntas ----
+            const secReset =
+                row('Tiempo p/ reset', rEta, '#f0b429') +
+                row('Resets (tú)', totalResets, '#f0b429') +
                 (s.res != null ? row('Resets (juego)', s.res, '#58a6ff') : '') +
                 (s.gres != null ? row('Grand resets', s.gres, '#58a6ff') : '') +
-                row('Resets (tú)', totalResets, '#f0b429') +
                 row('Resets/h (1h)', rLastHour, '#f0b429') +
-                row('Resets/día (24h)', rLastDay, '#f0b429') +
-                row('EXP', pct.toFixed(1) + '%') + bar(s.exp - s.cur, s.next - s.cur, '#58a6ff') +
-                row('EXP/h (10m)', ok ? sh(expH) : '…') +
-                row('Próx. nivel', eta > 0 && eta < 100 ? Math.floor(eta) + 'h ' + Math.round(eta % 1 * 60) + 'm' : '—') +
-                row('Tiempo p/ reset', rEta, '#f0b429') +
-                row('Sesión', Math.floor(ses / 60) + 'h ' + Math.round(ses % 60) + 'm · +' + sh(s.exp - ov.exp0)) +
-                (s.pts > 0 ? row('Puntos libres', s.pts, '#f0b429') : '') +
+                row('Resets/día (24h)', rLastDay, '#f0b429');
+
+            // ---- 3. SESIÓN ----
+            const secSession =
+                row('Duración', Math.floor(ses / 60) + 'h ' + Math.round(ses % 60) + 'm') +
+                row('EXP ganada', '+' + sh(s.exp - ov.exp0)) +
+                (s.pts > 0 ? row('Puntos libres', s.pts, '#f0b429') : '');
+
+            // ---- 4. ESTADO DEL BOT (solo si hay algo que reportar) ----
+            const secAuto =
                 (ov.rst && ov.rst.n ? row('Auto /reset', ov.rst.n >= 3 ? 'falló x3' : 'intento ' + ov.rst.n, ov.rst.n >= 3 ? '#f85149' : '#d29922') : '') +
                 (ov.mv && ov.mv.n ? row('Auto /move', ov.mv.done ? 'hecho ✓' : 'intento ' + ov.mv.n, ov.mv.done ? '#3fb950' : '#d29922') : '');
+
+            ov.el.innerHTML = head +
+                `<div style="margin:2px 0 1px;color:#58a6ff;font-size:10px;font-weight:700;letter-spacing:.05em;border-top:1px solid #21262d;padding-top:2px">NIVEL</div>` + secLevel +
+                `<div style="margin:2px 0 1px;color:#f0b429;font-size:10px;font-weight:700;letter-spacing:.05em;border-top:1px solid #21262d;padding-top:2px">RESET</div>` + secReset +
+                `<div style="margin:2px 0 1px;color:#8b949e;font-size:10px;font-weight:700;letter-spacing:.05em;border-top:1px solid #21262d;padding-top:2px">SESIÓN</div>` + secSession +
+                (secAuto ? `<div style="margin:2px 0 1px;color:#d29922;font-size:10px;font-weight:700;letter-spacing:.05em;border-top:1px solid #21262d;padding-top:2px">BOT</div>` + secAuto : '');
         } catch (e) {
             console.warn('[MH] mh-stats:', e);
         }
     });
+
+    // ---------- arrastrar / soltar el overlay ----------
+    // (listener en window con captura: el innerHTML se regenera y borraría los listeners del nodo)
+    window.addEventListener('pointerdown', (e) => {
+        if (!ov.el || !ov.el.contains(e.target) || e.button !== 0) return;
+        dragging = true;
+        const r = ov.el.getBoundingClientRect();
+        ov.grab = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+        ov.el.style.cursor = 'grabbing';
+        e.preventDefault();
+    }, true);
+
+    window.addEventListener('pointermove', (e) => {
+        if (!dragging || !ov.el) return;
+        pos.x = e.clientX - ov.grab.dx;
+        pos.y = e.clientY - ov.grab.dy;
+        applyPos();
+    }, true);
+
+    window.addEventListener('pointerup', () => {
+        if (!dragging) return;
+        dragging = false;
+        if (ov.el) ov.el.style.cursor = 'move';
+        chrome.storage.local.set({ [POS_KEY]: { x: Math.round(pos.x), y: Math.round(pos.y) } }).catch(() => { });
+    }, true);
 
     console.log('[MH] stats.js cargado');
 })();
