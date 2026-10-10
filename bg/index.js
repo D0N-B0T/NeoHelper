@@ -155,8 +155,8 @@ chrome.runtime.onMessage.addListener((m, sender) => {
         if (m.type === 'alert_interest') {
             chrome.notifications.create({
                 type: 'basic', iconUrl: 'icon.png',
-                title: '⚠️ ¡ALERTA EN RADAR!',
-                message: `¡El jugador "${m.nombre}" apareció a ${m.distancia} tiles! Coordenadas: (${m.x}, ${m.y})`,
+                title: m.title || '⚠️ ¡ALERTA EN RADAR!',
+                message: m.message || `¡El jugador "${m.nombre}" apareció a ${m.distancia} tiles! Coordenadas: (${m.x}, ${m.y})`,
                 priority: 2
             });
             return;

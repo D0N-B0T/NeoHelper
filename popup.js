@@ -222,10 +222,42 @@ import {
   if (c.radarTTL != null) $('radar-ttl').value = c.radarTTL;
   if (c.radarMeX != null) $('me-x').value = c.radarMeX;
   if (c.radarMeY != null) $('me-y').value = c.radarMeY;
+  const ESP_CATEGORIES = ['admin', 'watch', 'hostile', 'ally', 'neutral', 'me', 'mob', 'golden'];
+  const ESP_DEFAULT_COLORS = {
+    admin: '#ff2d95', watch: '#f85149', hostile: '#ff3333', ally: '#3fb950',
+    neutral: '#58a6ff', me: '#f0b429', mob: '#a371f7', golden: '#f0b429'
+  };
+  const ESP_DEFAULT_SHAPES = {
+    admin: 'dashed', watch: 'cross', hostile: 'double', ally: 'box_corners',
+    neutral: 'corners', me: 'corners', mob: 'corners', golden: 'corners'
+  };
+
   if (c.espCfg) {
     $('esp-max-dist').value = c.espCfg.maxDist ?? 0;
+    $('esp-admins').value = (c.espCfg.admins || ['aslar']).join(', ');
+    $('esp-watch').value = (c.espCfg.watch || (c.watchlist ? splitNames(c.watchlist) : [])).join(', ');
     $('esp-names').value = (c.espCfg.whitelist || []).join(', ');
     $('esp-black').value = (c.espCfg.blacklist || []).join(', ');
+    $('esp-show-dist').checked = c.espCfg.showDistance !== false;
+    $('esp-show-clan').checked = c.espCfg.showClan !== false;
+    $('esp-show-badges').checked = c.espCfg.showBadges !== false;
+    $('esp-show-me').checked = c.espCfg.showMe !== false;
+    $('esp-show-mobs').checked = c.espCfg.showMobs !== false;
+    $('esp-show-golden').checked = c.espCfg.showGolden !== false;
+    $('esp-glow').checked = c.espCfg.glow !== false;
+
+    ESP_CATEGORIES.forEach(k => {
+      if ($('esp-col-' + k)) $('esp-col-' + k).value = c.espCfg.colors?.[k] || ESP_DEFAULT_COLORS[k];
+      if ($('esp-shp-' + k)) $('esp-shp-' + k).value = c.espCfg.shapes?.[k] || ESP_DEFAULT_SHAPES[k];
+    });
+  } else {
+    $('esp-show-dist').checked = true;
+    $('esp-show-clan').checked = true;
+    $('esp-show-badges').checked = true;
+    $('esp-show-me').checked = true;
+    $('esp-show-mobs').checked = true;
+    $('esp-show-golden').checked = true;
+    $('esp-glow').checked = true;
   }
   if (c.autoCfg) {
     $('auto-user').value = c.autoCfg.user || '';
@@ -262,7 +294,33 @@ import {
     chatX: $('chatx').value === '' ? null : +$('chatx').value,
     chatY: $('chaty').value === '' ? null : +$('chaty').value
   });
-  $('watchlist').oninput = () => chrome.storage.local.set({ watchlist: $('watchlist').value });
+  $('watchlist').oninput = async () => {
+    const val = $('watchlist').value;
+    const names = splitNames(val);
+    const { espCfg } = await chrome.storage.local.get('espCfg');
+    chrome.storage.local.set({
+      watchlist: val,
+      espCfg: Object.assign({}, espCfg || {}, { watch: names })
+    });
+    if ($('esp-watch')) $('esp-watch').value = val;
+  };
+  $('esp-watch').oninput = async () => {
+    const val = $('esp-watch').value;
+    const names = splitNames(val);
+    const { espCfg } = await chrome.storage.local.get('espCfg');
+    chrome.storage.local.set({
+      espCfg: Object.assign({}, espCfg || {}, { watch: names }),
+      watchlist: val
+    });
+    if ($('watchlist')) $('watchlist').value = val;
+  };
+  $('esp-admins').oninput = async () => {
+    const names = splitNames($('esp-admins').value);
+    const { espCfg } = await chrome.storage.local.get('espCfg');
+    chrome.storage.local.set({
+      espCfg: Object.assign({}, espCfg || {}, { admins: names })
+    });
+  };
   $('radar-dist').oninput = () => chrome.storage.local.set({ radarMinDist: +$('radar-dist').value || 0 });
   $('radar-ttl').oninput = () => chrome.storage.local.set({ radarTTL: Math.max(3, +$('radar-ttl').value || 15) });
   $('me-x').oninput = () => chrome.storage.local.set({ radarMeX: $('me-x').value === '' ? 226 : +$('me-x').value });
@@ -619,15 +677,59 @@ import {
   // ---------- ESP / Auto ----------
   $('esp-toggle').onclick = async () =>
     chrome.storage.local.set({ espEnabled: !(await chrome.storage.local.get('espEnabled')).espEnabled });
+  $('esp-overlay-toggle').onclick = async () => {
+    const { espCfg } = await chrome.storage.local.get('espCfg');
+    const cur = espCfg?.showOverlay === false ? true : false;
+    chrome.storage.local.set({ espCfg: Object.assign({}, espCfg || {}, { showOverlay: cur }) });
+  };
+  $('esp-escape-toggle').onclick = async () => {
+    const { espCfg } = await chrome.storage.local.get('espCfg');
+    const cur = !(espCfg?.autoEscape);
+    chrome.storage.local.set({ espCfg: Object.assign({}, espCfg || {}, { autoEscape: cur }) });
+  };
   $('esp-save').onclick = async () => {
     const { espCfg } = await chrome.storage.local.get('espCfg');
+    const colors = {};
+    const shapes = {};
+    ESP_CATEGORIES.forEach(k => {
+      colors[k] = $('esp-col-' + k)?.value || ESP_DEFAULT_COLORS[k];
+      shapes[k] = $('esp-shp-' + k)?.value || ESP_DEFAULT_SHAPES[k];
+    });
+
     chrome.storage.local.set({
       espCfg: Object.assign({}, espCfg || {}, {
         maxDist: +$('esp-max-dist').value || 0,
+        admins: splitNames($('esp-admins').value),
+        watch: splitNames($('esp-watch').value),
         whitelist: splitNames($('esp-names').value),
-        blacklist: splitNames($('esp-black').value)
+        blacklist: splitNames($('esp-black').value),
+        showDistance: $('esp-show-dist').checked,
+        showClan: $('esp-show-clan').checked,
+        showBadges: $('esp-show-badges').checked,
+        showMe: $('esp-show-me').checked,
+        showMobs: $('esp-show-mobs').checked,
+        showGolden: $('esp-show-golden').checked,
+        glow: $('esp-glow').checked,
+        colors,
+        shapes
       })
     });
+    flashBtn?.($('esp-save'));
+  };
+
+  $('esp-reset-theme').onclick = async () => {
+    ESP_CATEGORIES.forEach(k => {
+      if ($('esp-col-' + k)) $('esp-col-' + k).value = ESP_DEFAULT_COLORS[k];
+      if ($('esp-shp-' + k)) $('esp-shp-' + k).value = ESP_DEFAULT_SHAPES[k];
+    });
+    $('esp-show-dist').checked = true;
+    $('esp-show-clan').checked = true;
+    $('esp-show-badges').checked = true;
+    $('esp-show-me').checked = true;
+    $('esp-show-mobs').checked = true;
+    $('esp-show-golden').checked = true;
+    $('esp-glow').checked = true;
+    $('esp-save').click();
   };
   $('auto-toggle').onclick = async () =>
     chrome.storage.local.set({ autoEnabled: !(await chrome.storage.local.get('autoEnabled')).autoEnabled });
@@ -958,6 +1060,14 @@ import {
     $('ts-esp').textContent = l.espCfg?.maxDist ? `≤ ${l.espCfg.maxDist} tiles` : 'sin límite';
     $('esp-toggle').textContent = 'ESP: ' + (l.espEnabled ? 'ON' : 'OFF');
     $('esp-toggle').className = 'b grow ' + (l.espEnabled ? 'tg-on' : 'tg-off');
+
+    const overlayOn = l.espCfg?.showOverlay !== false;
+    $('esp-overlay-toggle').textContent = 'Overlay: ' + (overlayOn ? 'ON' : 'OFF');
+    $('esp-overlay-toggle').className = 'b grow ' + (overlayOn ? 'tg-on' : 'tg-off');
+
+    const escOn = !!l.espCfg?.autoEscape;
+    $('esp-escape-toggle').textContent = 'Auto-escape Lorencia: ' + (escOn ? 'ON' : 'OFF');
+    $('esp-escape-toggle').className = 'b grow ' + (escOn ? 'tg-on' : 'tg-off');
 
     const a = l.autoState;
     const on = !!l.autoEnabled;

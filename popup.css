@@ -683,6 +683,71 @@ select:focus {
     border-color: #58a6ff;
 }
 
+.tg-on {
+    color: #3fb950 !important;
+    border-color: #2ea043 !important;
+    background: rgba(35, 134, 54, .18) !important;
+}
+
+.tg-off {
+    color: #8b949e !important;
+    border-color: #30363d !important;
+    background: #161b22 !important;
+}
+
+input[type="color"] {
+    width: 32px;
+    height: 24px;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 3px;
+}
+
+.chk-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 3px 0;
+    cursor: pointer;
+    font-size: 11px;
+    text-transform: none;
+    color: #c9d1d9;
+    font-weight: normal;
+}
+
+.chk-label input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #3fb950;
+    cursor: pointer;
+}
+
+.style-row {
+    display: grid;
+    grid-template-columns: 92px 34px 1fr;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+    font-size: 11px;
+}
+
+.style-row span {
+    font-size: 11px;
+    font-weight: 600;
+}
+
 .b:disabled {
     opacity: .45;
     cursor: default;

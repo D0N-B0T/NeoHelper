@@ -175,15 +175,149 @@
 
       <div class="p" id="p-esp">
         <div class="sum"><b id="tv-esp">Off</b><span id="ts-esp">—</span></div>
-        <div class="r"><button id="esp-toggle" class="b grow">ESP: OFF</button><button id="esp-save"
-            class="b">Guardar</button></div>
-        <div class="row2">
-          <div><label>Distancia máxima (0 = sin límite)</label><input id="esp-max-dist" type="number" min="0"></div>
-          <div><label>Solo estos nombres</label><input id="esp-names" type="text" placeholder="coma" autocomplete="off">
-          </div>
-          <div><label>Ocultar estos nombres</label><input id="esp-black" type="text" placeholder="coma"
-              autocomplete="off"></div>
+        <div class="r">
+          <button id="esp-toggle" class="b grow">ESP: OFF</button>
+          <button id="esp-overlay-toggle" class="b grow">Overlay: ON</button>
+          <button id="esp-save" class="b">Guardar</button>
         </div>
+        <div class="r mt">
+          <button id="esp-escape-toggle" class="b grow">Auto-escape Lorencia: OFF</button>
+          <button id="esp-reset-theme" class="b" title="Restablecer colores y formas originales">Reset Tema</button>
+        </div>
+
+        <details class="cfg" open>
+          <summary>Filtros de nombres y distancia</summary>
+          <div class="row2">
+            <div><label>Nombres de Admins / GMs</label><input id="esp-admins" type="text" placeholder="aslar, Admin" autocomplete="off"></div>
+            <div><label>Nombres peligrosos (alerta / escape)</label><input id="esp-watch" type="text" placeholder="Fantarta, Asesino" autocomplete="off"></div>
+            <div><label>Distancia máxima (0 = sin límite)</label><input id="esp-max-dist" type="number" min="0"></div>
+            <div><label>Solo estos nombres (whitelist)</label><input id="esp-names" type="text" placeholder="coma" autocomplete="off"></div>
+            <div><label>Ocultar estos nombres (blacklist)</label><input id="esp-black" type="text" placeholder="coma" autocomplete="off"></div>
+          </div>
+        </details>
+
+        <details class="cfg" open>
+          <summary>Elementos visibles (Toggles)</summary>
+          <div class="row2" style="margin-top:6px;">
+            <label class="chk-label"><input type="checkbox" id="esp-show-dist"> Distancia (tiles)</label>
+            <label class="chk-label"><input type="checkbox" id="esp-show-clan"> Clan del jugador</label>
+            <label class="chk-label"><input type="checkbox" id="esp-show-badges"> Etiquetas (ADMIN / PK / CLAN)</label>
+            <label class="chk-label"><input type="checkbox" id="esp-show-me"> Mi propio personaje (Tú)</label>
+            <label class="chk-label"><input type="checkbox" id="esp-show-mobs"> Mobs normales</label>
+            <label class="chk-label"><input type="checkbox" id="esp-show-golden"> Mobs dorados (Golden)</label>
+            <label class="chk-label"><input type="checkbox" id="esp-glow"> Resplandor (Glow)</label>
+          </div>
+        </details>
+
+        <details class="cfg" open>
+          <summary>Colores y Formas de cajas</summary>
+          <div style="margin-top:8px;">
+            <div class="style-row">
+              <span style="color:#ff2d95;">Admin / GM</span>
+              <input type="color" id="esp-col-admin" value="#ff2d95">
+              <select id="esp-shp-admin">
+                <option value="dashed">Punteado</option>
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="double">Doble cuadro</option>
+                <option value="cross">Cuadro con X</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+            <div class="style-row">
+              <span style="color:#f85149;">Peligro</span>
+              <input type="color" id="esp-col-watch" value="#f85149">
+              <select id="esp-shp-watch">
+                <option value="cross">Cuadro con X</option>
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="double">Doble cuadro</option>
+                <option value="dashed">Punteado</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+            <div class="style-row">
+              <span style="color:#ff3333;">Hostil / PK</span>
+              <input type="color" id="esp-col-hostile" value="#ff3333">
+              <select id="esp-shp-hostile">
+                <option value="double">Doble cuadro</option>
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="cross">Cuadro con X</option>
+                <option value="dashed">Punteado</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+            <div class="style-row">
+              <span style="color:#3fb950;">Clan / Aliado</span>
+              <input type="color" id="esp-col-ally" value="#3fb950">
+              <select id="esp-shp-ally">
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="double">Doble cuadro</option>
+                <option value="cross">Cuadro con X</option>
+                <option value="dashed">Punteado</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+            <div class="style-row">
+              <span style="color:#58a6ff;">Neutral</span>
+              <input type="color" id="esp-col-neutral" value="#58a6ff">
+              <select id="esp-shp-neutral">
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="double">Doble cuadro</option>
+                <option value="cross">Cuadro con X</option>
+                <option value="dashed">Punteado</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+            <div class="style-row">
+              <span style="color:#f0b429;">Tú (Me)</span>
+              <input type="color" id="esp-col-me" value="#f0b429">
+              <select id="esp-shp-me">
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="double">Doble cuadro</option>
+                <option value="cross">Cuadro con X</option>
+                <option value="dashed">Punteado</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+            <div class="style-row">
+              <span style="color:#a371f7;">Mobs</span>
+              <input type="color" id="esp-col-mob" value="#a371f7">
+              <select id="esp-shp-mob">
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="double">Doble cuadro</option>
+                <option value="cross">Cuadro con X</option>
+                <option value="dashed">Punteado</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+            <div class="style-row">
+              <span style="color:#f0b429;">Golden Mobs</span>
+              <input type="color" id="esp-col-golden" value="#f0b429">
+              <select id="esp-shp-golden">
+                <option value="corners">Esquinas</option>
+                <option value="box">Cuadro simple</option>
+                <option value="box_corners">Cuadro + Esquinas</option>
+                <option value="double">Doble cuadro</option>
+                <option value="cross">Cuadro con X</option>
+                <option value="dashed">Punteado</option>
+                <option value="none">Sin cuadro (solo nombre)</option>
+              </select>
+            </div>
+          </div>
+        </details>
       </div>
 
       <div class="p" id="p-hunt">
