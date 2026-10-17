@@ -141,6 +141,33 @@ chrome.runtime.onMessage.addListener((m, sender) => {
             }
             return;
         }
+        // ---------- MH-WARP (viaje por ventana M) ----------
+        if (m.type === 'mh-warp') {
+            const tabId = await resolveTabId(m, sender);
+            if (!tabId) return;
+            const t = { tabId };
+            try {
+                await chrome.debugger.attach(t, '1.3')
+                    .catch(e => { if (!/already attached/i.test(e.message)) throw e; });
+                const name = JSON.stringify(String(m.name || ''));
+                const r = await chrome.debugger.sendCommand(t, 'Runtime.evaluate', {
+                    expression: `window.__mhWarpWindow(${name})`,
+                    awaitPromise: true, returnByValue: true
+                });
+                if (!r?.result?.value?.ok) {
+                    console.warn('[MH-WARP] falló:', r?.result?.value);
+                }
+            } catch (e) {
+                console.warn('[MH-WARP] error:', e);
+            } finally {
+                const { run } = await chrome.storage.session.get('run');
+                if (!run || run.tabId !== tabId) {
+                    await chrome.debugger.detach(t).catch(() => { });
+                }
+            }
+            return;
+        }
+
         // ---------- PRESS ENTER ----------
         if (m.type === 'pressEnter') {
             const tabId = await resolveTabId(m, sender);

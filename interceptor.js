@@ -284,6 +284,60 @@
     });
     console.log('[MH] Interceptor cargado');
 
+    // Viaje por VENTANA M (MAIN world): activa el menú de mapas del juego
+    // (__store.warpWindowEnabled), simula la tecla M sobre el canvas y clica
+    // el elemento de texto del nombre de mapa. Devuelve una promesa.
+    window.__mhWarpWindow = (nombreMapa) => {
+        try {
+            const S = window.__store;
+            if (S) S.warpWindowEnabled = true;
+
+            const canvas = document.querySelector('canvas');
+            if (canvas) {
+                canvas.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'm', code: 'KeyM', keyCode: 77, which: 77, bubbles: true
+                }));
+                canvas.dispatchEvent(new KeyboardEvent('keyup', {
+                    key: 'm', code: 'KeyM', keyCode: 77, which: 77, bubbles: true
+                }));
+            }
+
+            const busqueda = String(nombreMapa || '').toLowerCase().trim();
+            if (!busqueda) return { ok: false, error: 'sin nombre de mapa' };
+
+            const buscar = () => {
+                const els = document.querySelectorAll('div, span, li, button, a');
+                for (const el of els) {
+                    if (el.children.length) continue;
+                    const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    if (!txt || !txt.includes(busqueda)) continue;
+                    const r = el.getBoundingClientRect();
+                    if (r.width <= 0 || r.height <= 0) continue;
+                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                    return { ok: true, hit: el.innerText.trim() };
+                }
+                return null;
+            };
+
+            return new Promise((resolve) => {
+                let tries = 0;
+                const tick = () => {
+                    tries++;
+                    let hit = null;
+                    try { hit = buscar(); } catch (_) { }
+                    if (hit) return resolve(hit);
+                    if (tries >= 25) return resolve({ ok: false, error: 'no encontrado: ' + nombreMapa });
+                    setTimeout(tick, 100);
+                };
+                setTimeout(tick, 300);
+            });
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+    };
+
     window.__mhMove = (x, y) => {
         try {
             const S = window.__store;

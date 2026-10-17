@@ -63,11 +63,27 @@
         const me = MH.api.getMe?.();
         if (!me || me.map == null) return;
 
-        // 1. MAPA DISTINTO → /move
+        // 1. MAPA DISTINTO → viaje
         if (me.map !== step.map) {
             // `step.cmd` = variante elegida en el popup (ej. '/move devias2').
             // Si no hay, la primera variante del mapa (moveCommands[step.map]).
             const cmd = step.cmd || MH.cfg.mu.moveCommands[step.map];
+
+            // MODO VENTANA M: abre el menú de mapas y clica el nombre. Se pide
+            // al background, que lo ejecuta en el MAIN world (window.__mhWarpWindow).
+            if (step.warp === 'window') {
+                const nombre = step.warpName || step.mapName || cmd || String(step.map);
+                const lastAtW = a.lastMoveAt || 0;
+                if (a.lastMoveCmd === 'warp:' + nombre && Date.now() - lastAtW < MOVE_COOLDOWN_MS) return;
+                console.log('[ROUTES] viaje por ventana M →', nombre);
+                a.lastMoveCmd = 'warp:' + nombre;
+                a.lastMoveMap = step.map;
+                a.lastMoveAt = Date.now();
+                if (a.holding) await MH.api.unholdMouse?.();
+                chrome.runtime.sendMessage({ target: 'bg', type: 'mh-warp', name: nombre }).catch(() => { });
+                return;
+            }
+
             if (!cmd) {
                 console.warn('[ROUTES] no hay comando /move para mapa', step.map);
                 return;

@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Mouse Hold BG",
-  "version": "6.0",
+  "name": "Mu Online Toolkit",
+  "version": "7.3",
   "action": {
-    "default_title": "Mouse Hold BG"
+    "default_title": "Mu Online Toolkit"
   },
-  "description": "Mouse hold + Radar en ventana flotante",
+  "description": "Toolkit for Mu Online",
   "permissions": [
     "debugger",
     "storage",
@@ -71,5 +71,11 @@
         "*://*.mu.mormon.garden/*"
       ]
     }
-  ]
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }

@@ -11,7 +11,7 @@ import {
   const c = await chrome.storage.local.get([
     'button', 'x', 'y', 'repeat', 'chatMsg', 'statPts', 'chatX', 'chatY', 'resetLv',
     'watchlist', 'radarMinDist', 'radarTTL', 'radarMeX', 'radarMeY', 'savedLocs', 'uiTile',
-    'espCfg', 'autoCfg', 'resetBase', 'huntCfg', 'simGridStep', 'mapLayers', 'heatModes'
+    'espCfg', 'autoCfg', 'resetBase', 'huntCfg', 'simGridStep', 'mapLayers', 'heatModes', 'charsList'
   ]);
   // ---------- rutas ----------
   let routes = [];
@@ -121,6 +121,22 @@ import {
       };
       fillVariants();
       varSel.onchange = () => { s.cmd = varSel.value || null; saveRoute(active); };
+
+      // Modo de viaje al mapa: /move (chat) o ventana M (menu de mapas).
+      const warpSel = document.createElement('select');
+      warpSel.title = 'Modo de viaje al mapa';
+      [['move', '/move'], ['window', 'Ventana M']].forEach(([v, t]) => {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = t;
+        warpSel.appendChild(o);
+      });
+      warpSel.value = s.warp === 'window' ? 'window' : 'move';
+      warpSel.onchange = () => {
+        s.warp = warpSel.value;
+        varSel.disabled = warpSel.value === 'window' || variantsFor(s.map).length < 2;
+        saveRoute(active);
+      };
+      varSel.disabled = warpSel.value === 'window' || variantsFor(s.map).length < 2;
       mapSel.onchange = () => {
         s.map = +mapSel.value;
         s.cmd = null;              // ciudad nueva -> variante por defecto
@@ -163,7 +179,7 @@ import {
       delBtn.className = 'b stp2'; delBtn.textContent = '✕';
       delBtn.onclick = () => { active.steps.splice(i, 1); saveRoute(active); renderRoutes(); };
 
-      row.append(lvInp, mapSel, varSel, xInp, yInp, useBtn, untilInp, delBtn);
+      row.append(lvInp, mapSel, varSel, warpSel, xInp, yInp, useBtn, untilInp, delBtn);
       return row;
     }));
   };
@@ -262,10 +278,23 @@ import {
   if (c.autoCfg) {
     $('auto-user').value = c.autoCfg.user || '';
     $('auto-pass').value = c.autoCfg.pass || '';
-    $('auto-char').value = c.autoCfg.charName || '';
     $('auto-lv-gm').value = c.autoCfg.icarusLv?.gm ?? 113;
     $('auto-lv-def').value = c.autoCfg.icarusLv?._default ?? 170;
   }
+  // Lista de personajes: la aprende content/auto.js en la pantalla de selección
+  // (chrome.storage.local['charsList']). Se agregan solos los nuevos y se
+  // conserva el elegido aunque ya no aparezca en la lista.
+  const fillChars = (list, keep) => {
+    const sel = $('auto-char');
+    const cur = keep ?? sel.value ?? '';
+    const names = [...new Set((list || []).map((x) => x && x.n).filter(Boolean))];
+    if (cur && !names.some((n) => n.toLowerCase() === cur.toLowerCase())) names.unshift(cur);
+    sel.replaceChildren(...(names.length
+      ? names.map((n) => { const o = document.createElement('option'); o.value = n; o.textContent = n; return o; })
+      : [Object.assign(document.createElement('option'), { value: '', textContent: '— sin datos: entra al char-select —' })]));
+    sel.value = cur || names[0] || '';
+  };
+  fillChars(c.charsList, c.autoCfg?.charName || '');
   if (c.resetBase != null) $('reset-base').value = c.resetBase;
 
   // ---------- riel de herramientas -> hoja lateral ----------
@@ -502,6 +531,10 @@ import {
     if (ch.resetTimes) rkCache.rt.resetTimes = ch.resetTimes.newValue;
     if (ch.resetCount) rkCache.rt.resetCount = ch.resetCount.newValue;
     if (rkCache.data && Date.now() - (rkRtSeen || 0) > 30000) { rkRtSeen = Date.now(); renderRanking(); }
+  });
+  // El char-select publica los personajes -> refrescar el desplegable al vuelo
+  chrome.storage.onChanged.addListener((ch, area) => {
+    if (area === 'local' && ch.charsList) fillChars(ch.charsList.newValue, $('auto-char')?.value);
   });
 
   const renderRanking = () => {
